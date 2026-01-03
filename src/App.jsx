@@ -8,24 +8,23 @@ import {
   ArrowRightLeft, Share2, Navigation, Utensils, ShoppingBag, Ticket, AlertCircle, CheckCircle2, 
   Palmtree, Wallet, Settings, ChevronRight, BedDouble, Bus, Store, Pill, Bell, Menu, X, 
   Languages, PieChart, Luggage, ClipboardList, Heart, NotebookPen, Volume2, Coffee, 
-  Gamepad2, Smile, Home, MinusCircle, Car, Footprints, Anchor, Gift, Map, Armchair, Sparkles, Send,
-  Coffee as CoffeeIcon, Briefcase
+  Gamepad2, Smile, Home, MinusCircle, Car, Footprints, Anchor, Gift, Map, Armchair, Sparkles, Send
 } from 'lucide-react';
 
-// --- 安全讀取 Firebase 設定 ---
+// --- 安全讀取 Firebase 設定 (防止 Vercel/本地環境變數缺失導致空白頁) ---
 const getSafeFirebaseConfig = () => {
   try {
-    if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    if (typeof __firebase_config !== 'undefined' && __firebase_config && __firebase_config !== "") {
       return JSON.parse(__firebase_config);
     }
   } catch (e) {
-    console.warn("Firebase config missing or invalid.");
+    console.warn("Firebase 配置解析失敗，進入預覽模式。");
   }
   return {
-    apiKey: "",
+    apiKey: "GUEST_MODE",
     authDomain: "default-trip-mate.firebaseapp.com",
-    projectId: "default-trip-mate",
-    storageBucket: "default-trip-mate.appspot.com",
+    projectId: "default-project",
+    storageBucket: "default-project.appspot.com",
     messagingSenderId: "000",
     appId: "000"
   };
@@ -35,12 +34,12 @@ const firebaseConfig = getSafeFirebaseConfig();
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trip-mate';
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-// 初始化 Firebase
+// 初始化 Firebase (確保熱更新不會報錯)
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- 貨幣自動辨識邏輯 ---
+// --- 貨幣自動辨識邏輯 (基於 Trip ID) ---
 const detectCurrency = (id) => {
   const text = (id || "").toLowerCase();
   if (/japan|tokyo|osaka|kyoto|okinawa|hokkaido|nrt|hnd|kix|日本|東京|大阪|京都|沖繩|北海道/.test(text)) return 'JPY';
@@ -49,12 +48,12 @@ const detectCurrency = (id) => {
   if (/usa|america|new york|la|sf|美洲|美國|紐約|洛杉磯/.test(text)) return 'USD';
   if (/europe|france|paris|germany|berlin|italy|rome|英國|歐洲|法國|巴黎|德國|柏林|義大利|羅馬/.test(text)) return 'EUR';
   if (/thailand|bangkok|泰國|曼谷/.test(text)) return 'THB';
-  return 'TWD';
+  return 'TWD'; 
 };
 
-// --- Gemini API Helper ---
+// --- Gemini API Helper (含錯誤重試與 JSON 穩定解析) ---
 const callGemini = async (prompt, systemInstruction = "") => {
-  const apiKey = ""; 
+  const apiKey = ""; // 執行環境自動填入
   let delay = 1000;
   for (let i = 0; i < 5; i++) {
     try {
@@ -77,7 +76,7 @@ const callGemini = async (prompt, systemInstruction = "") => {
   }
 };
 
-// --- 全域樣式與行動端優化 ---
+// --- 全域樣式與行動端/PWA 優化 ---
 const fontStyle = `
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;600;700&display=swap');
 body { font-family: 'GenRyuMin', 'Noto Serif TC', serif; touch-action: manipulation; -webkit-text-size-adjust: 100%; background-color: #F5F7F4; }
@@ -85,12 +84,16 @@ button, a, .cursor-pointer { min-height: 44px; min-width: 44px; display: flex; a
 input, select, textarea { font-size: 16px !important; }
 .menu-scrollbar { -webkit-overflow-scrolling: touch; }
 .btn-active-effect:active { transform: scale(0.95); transition: transform 0.1s; }
+.menu-scrollbar::-webkit-scrollbar { width: 6px; }
+.menu-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+.menu-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
 @keyframes sparkle { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } 100% { transform: scale(1); opacity: 1; } }
 .sparkle-effect { animation: sparkle 2s infinite ease-in-out; }
 `;
 
 const getGoogleMapsLink = (location) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
 const getNavigationLink = (location) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location)}`;
+
 const playGoogleAudio = (text) => {
   const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ja&q=${encodeURIComponent(text)}`;
   const audio = new Audio(url);
@@ -104,19 +107,23 @@ export default function App() {
   const [isJoined, setIsJoined] = useState(false);
 
   useEffect(() => {
+    // 1. 注入 PWA 與行動端元標籤
     const head = document.head;
     const metaViewport = document.createElement('meta');
     metaViewport.name = "viewport";
     metaViewport.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover";
     head.appendChild(metaViewport);
+
     const metaApple = document.createElement('meta');
     metaApple.name = "apple-mobile-web-app-capable";
     metaApple.content = "yes";
     head.appendChild(metaApple);
+
     const metaTheme = document.createElement('meta');
     metaTheme.name = "theme-color";
     metaTheme.content = "#059669";
     head.appendChild(metaTheme);
+
     const style = document.createElement('style');
     style.innerHTML = fontStyle;
     head.appendChild(style);
@@ -129,7 +136,7 @@ export default function App() {
           await signInAnonymously(auth);
         }
       } catch (err) {
-        setUser({ uid: 'test-user-' + Math.random().toString(36).substring(7) });
+        setUser({ uid: 'user-' + Math.random().toString(36).substring(7) });
       }
     };
     initAuth();
@@ -165,7 +172,9 @@ function Onboarding({ onJoin, initialId }) {
       <div className="absolute top-[-10%] left-[-10%] w-64 h-64 bg-emerald-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
       <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl p-8 w-full max-w-md text-center relative z-10 border border-white/50">
         <div className="flex justify-center mb-6">
-          <div className="bg-gradient-to-tr from-emerald-500 to-teal-400 p-5 rounded-2xl text-white shadow-lg transform -rotate-6"><Plane size={56} strokeWidth={1.5} /></div>
+          <div className="bg-gradient-to-tr from-emerald-500 to-teal-400 p-5 rounded-2xl text-white shadow-lg transform -rotate-6">
+            <Plane size={56} strokeWidth={1.5} />
+          </div>
         </div>
         <h1 className="text-3xl font-bold text-emerald-900 mb-2 tracking-tight">旅伴 TripMate</h1>
         <p className="text-stone-600 mb-8 font-medium">你的智能旅遊規劃助手</p>
@@ -173,18 +182,19 @@ function Onboarding({ onJoin, initialId }) {
           <div className="text-left">
             <label className="block text-sm font-bold text-emerald-800 mb-2 ml-1">旅遊代碼 (Trip ID)</label>
             <div className="relative">
-              <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="例如: Tokyo2025" className="w-full px-5 py-4 bg-stone-50 border-2 border-stone-100 rounded-2xl focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition text-lg font-medium text-emerald-900 placeholder:text-stone-400"/>
-              <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-emerald-500 pointer-events-none"><Share2 size={20} /></div>
+              <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="例如: Tokyo2024" className="w-full px-5 py-4 bg-stone-50 border-2 border-stone-100 rounded-2xl focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition text-lg font-medium text-emerald-900 placeholder:text-stone-400"/>
+              <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-emerald-500"><Share2 size={20} /></div>
             </div>
           </div>
-          <button onClick={() => onJoin(input)} className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-bold py-4 rounded-2xl transition shadow-lg text-lg flex items-center justify-center gap-2">開始旅程 <ChevronRight size={20} /></button>
+          <button onClick={() => onJoin(input)} className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white font-bold py-4 rounded-2xl transition shadow-lg text-lg flex items-center justify-center gap-2 btn-active-effect">開始旅程 <ChevronRight size={20} /></button>
+          <p className="text-xs text-stone-500 mt-4 bg-emerald-50/50 py-2 rounded-lg"><Users size={14} className="inline mr-1" /> 與朋友輸入相同代碼即可同步</p>
         </div>
       </div>
     </div>
   );
 }
 
-// --- Dashboard & Navigation ---
+// --- Dashboard ---
 function TripDashboard({ tripId, userId, onLeave }) {
   const [activeTab, setActiveTab] = useState('home');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -205,12 +215,12 @@ function TripDashboard({ tripId, userId, onLeave }) {
     const unsubTodo = onSnapshot(collection(db, ...path, 'trip_todo'), (snap) => setTodoItems(snap.docs.map(d => ({id:d.id, ...d.data()})).filter(i=>i.tripId===tripId).sort((a,b)=>a.createdAt-b.createdAt)));
     const unsubWish = onSnapshot(collection(db, ...path, 'trip_wishlist'), (snap) => setWishlistItems(snap.docs.map(d => ({id:d.id, ...d.data()})).filter(i=>i.tripId===tripId).sort((a,b)=>a.createdAt-b.createdAt)));
     return () => { unsubItems(); unsubExp(); unsubPack(); unsubTodo(); unsubWish(); };
-  }, [tripId]);
+  }, [tripId, userId]);
 
   return (
     <div className="min-h-screen bg-[#F5F7F4] flex flex-col max-w-[1600px] mx-auto shadow-2xl overflow-hidden font-serif">
       <main className="flex-1 flex flex-col overflow-y-auto bg-[#F5F7F4] relative">
-        <div className="sticky top-0 z-10 bg-white shadow-md p-4 flex justify-between items-center md:hidden border-b border-stone-100">
+        <div className="sticky top-0 z-30 bg-white shadow-md p-4 flex justify-between items-center md:hidden border-b border-stone-100">
           <h1 className="text-xl font-bold text-emerald-900 flex items-center gap-2"><Palmtree size={24} className="text-emerald-500" /> TripMate</h1>
           <span className="text-xs font-mono font-bold text-stone-500 bg-stone-100 px-3 py-1 rounded-full uppercase">{tripId}</span>
         </div>
@@ -262,7 +272,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
                 </button>
               ))}
             </div>
-            <button onClick={onLeave} className="w-full flex items-center justify-center gap-3 text-red-500 hover:bg-red-50 p-4 rounded-xl border border-red-200 font-bold"><ArrowRightLeft size={20} /> 離開行程</button>
+            <button onClick={onLeave} className="w-full flex items-center justify-center gap-3 text-red-500 hover:bg-red-50 p-4 rounded-xl border border-red-200 font-bold"><ArrowRightLeft size={20} /> 離開行程 / 切換代碼</button>
           </div>
         </div>
       )}
@@ -270,7 +280,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- Home View (整合分類願望清單與導航) ---
+// --- Home View (整合直條分類願望清單與小地圖導航) ---
 function HomeView({ items, wishlistItems }) {
   const timelineItems = items.sort((a, b) => (a.datetime || a.checkInTime || '9999').localeCompare(b.datetime || b.checkInTime || '9999'));
   const categories = [
@@ -287,41 +297,47 @@ function HomeView({ items, wishlistItems }) {
         <div className="space-y-6 relative">
           <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-emerald-200/50"></div>
           {timelineItems.length === 0 ? <div className="ml-10 p-6 bg-white rounded-2xl text-stone-400 border border-stone-100">尚無行程</div> : 
-            timelineItems.map((item) => (
-              <div key={item.id} className="relative ml-10 animate-in fade-in slide-in-from-bottom-2">
-                <div className="absolute -left-[42px] top-4 w-5 h-5 rounded-full bg-emerald-500 border-4 border-white shadow-sm z-10"></div>
-                <div className="p-5 rounded-2xl shadow-sm border border-stone-100 bg-white">
-                  <div className="text-xs font-bold uppercase text-emerald-600 mb-1">{item.type}</div>
-                  <h3 className="text-xl font-bold text-stone-800">{item.title}</h3>
-                  <div className="text-sm font-medium text-emerald-700 mt-1 flex items-center gap-1"><Clock size={14}/> {item.datetime || '未定'}</div>
-                  {item.location && <div className="text-sm text-stone-600 mt-2"><MapPin size={14} className="inline mr-1"/> {item.location} <a href={getGoogleMapsLink(item.location)} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 font-bold">地圖</a></div>}
+            timelineItems.map((item) => {
+              let Icon = MapPin;
+              if (item.type === 'flight') Icon = Plane;
+              else if (item.type === 'train') Icon = Train;
+              else if (item.type === 'accommodation') Icon = BedDouble;
+              return (
+                <div key={item.id} className="relative ml-10 animate-in fade-in slide-in-from-bottom-2">
+                  <div className="absolute -left-[42px] top-4 w-5 h-5 rounded-full bg-emerald-500 border-4 border-white shadow-sm z-10"></div>
+                  <div className="p-5 rounded-2xl shadow-sm border border-stone-100 bg-white">
+                    <div className="flex items-center gap-2 mb-1"><Icon size={14} className="text-emerald-600"/><span className="text-xs font-bold uppercase text-emerald-600">{item.type}</span></div>
+                    <h3 className="text-xl font-bold text-stone-800">{item.title}</h3>
+                    <div className="text-sm font-medium text-emerald-700 mt-1 flex items-center gap-1"><Clock size={14}/> {item.datetime || '未定時間'}</div>
+                    {item.location && <div className="text-sm text-stone-600 mt-2 flex items-center gap-1"><MapPin size={14}/> {item.location} <a href={getGoogleMapsLink(item.location)} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 font-bold hover:underline">地圖</a></div>}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           }
         </div>
       </section>
 
       <section className="pt-8 border-t border-stone-200">
-        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3 mb-8"><Heart className="text-pink-500" size={32}/> 願望清單地圖</h2>
+        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3 mb-8"><Heart className="text-pink-500" size={32}/> 願望地圖指南</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {categories.map(cat => {
             const catItems = wishlistItems.filter(i => i.category === cat.id);
             return (
               <div key={cat.id} className="flex flex-col gap-4">
-                <div className="flex items-center gap-2 px-4 py-3 bg-white rounded-2xl shadow-sm border-b-4 border-emerald-500">
+                <div className={`flex items-center gap-2 px-4 py-3 bg-white rounded-2xl shadow-sm border-b-4 border-emerald-500`}>
                   <span className={cat.color}>{cat.icon}</span><span className="font-bold text-emerald-900">{cat.id}</span>
                 </div>
                 <div className="space-y-4">
                   {catItems.map(item => (
-                    <div key={item.id} className="bg-white rounded-2xl shadow-md overflow-hidden border border-stone-100">
+                    <div key={item.id} className="bg-white rounded-2xl shadow-md overflow-hidden border border-stone-100 group">
                       <div className="h-24 bg-stone-100 relative">
                         <iframe title={item.name} width="100%" height="100%" src={`https://maps.google.com/maps?q=${encodeURIComponent(item.name)}&t=&z=14&ie=UTF-8&iwloc=&output=embed`} style={{border:0}}></iframe>
                         <div className="absolute inset-0 bg-transparent cursor-pointer" onClick={() => window.open(getNavigationLink(item.name), '_blank')}></div>
                       </div>
                       <div className="p-3">
                         <h4 className="font-bold text-stone-800 text-sm truncate">{item.name}</h4>
-                        <button onClick={() => window.open(getNavigationLink(item.name), '_blank')} className="mt-2 w-full flex items-center justify-center gap-1 py-2 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold transition hover:bg-emerald-600 hover:text-white"><Navigation size={12}/> 即時導航</button>
+                        <button onClick={() => window.open(getNavigationLink(item.name), '_blank')} className="mt-2 w-full flex items-center justify-center gap-1 py-2 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold transition hover:bg-emerald-600 hover:text-white"><Navigation size={12}/> 即時導航路線</button>
                       </div>
                     </div>
                   ))}
@@ -335,7 +351,7 @@ function HomeView({ items, wishlistItems }) {
   );
 }
 
-// --- Packing ListView (含 AI) ---
+// --- Packing List (含 AI 建議) ---
 function PackingListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
   const [loadingAI, setLoadingAI] = useState(false);
@@ -347,27 +363,27 @@ function PackingListView({ tripId, items }) {
   const handleAI = async () => {
     setLoadingAI(true);
     try {
-      const res = await callGemini(`代碼 ${tripId}，列出 5 個重要行李建議，僅輸出名稱並用逗號隔開。`);
+      const res = await callGemini(`旅遊代碼為 ${tripId}。請建議 5 個重要行李，僅輸出項目名稱並用逗號隔開。不要有額外文字。`);
       const suggestions = (res || "").split(/[,，]/).map(s => s.trim().replace(/[0-9.]/g, ''));
-      for (const s of suggestions) { if (s) await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_packing'), { tripId, item: s, completed: false, createdAt: serverTimestamp() }); }
+      for (const s of suggestions) { if (s && s.length > 0) await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_packing'), { tripId, item: s, completed: false, createdAt: serverTimestamp() }); }
     } finally { setLoadingAI(false); }
   };
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-end mb-4">
         <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Luggage className="text-emerald-600" size={32}/> 行李清單</h2>
-        <button type="button" onClick={handleAI} disabled={loadingAI} className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-400 text-white rounded-full text-sm font-bold shadow-md sparkle-effect">{loadingAI ? '推薦中...' : '✨ AI 建議'}</button>
+        <button type="button" onClick={handleAI} disabled={loadingAI} className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-400 text-white rounded-full text-sm font-bold shadow-md sparkle-effect">{loadingAI ? '推薦中' : '✨ AI 建議'}</button>
       </div>
       <form onSubmit={handleAdd} className="flex gap-2 bg-white p-2 rounded-2xl border border-stone-100 shadow-sm">
         <input type="text" value={newItem} onChange={e=>setNewItem(e.target.value)} placeholder="新增行李..." className="flex-1 p-3 bg-stone-50 rounded-xl outline-none" />
-        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl"><Plus size={24}/></button>
+        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-700"><Plus size={24}/></button>
       </form>
       <div className="space-y-3">
-        {items.map(i => (
-          <div key={i.id} className="flex items-center bg-white p-4 rounded-xl border border-stone-100 shadow-sm cursor-pointer" onClick={() => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_packing', i.id), { completed: !i.completed })}>
-            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${i.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>{i.completed && <CheckCircle2 size={16} className="text-white"/>}</div>
-            <span className={`flex-1 text-lg ${i.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{i.item}</span>
-            <button type="button" onClick={(e)=>{e.stopPropagation();deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_packing', i.id))}} className="text-stone-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
+        {items.map(item => (
+          <div key={item.id} className="flex items-center bg-white p-4 rounded-xl border border-stone-100 shadow-sm cursor-pointer" onClick={() => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_packing', item.id), { completed: !item.completed })}>
+            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>{item.completed && <CheckCircle2 size={16} className="text-white"/>}</div>
+            <span className={`flex-1 text-lg font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.item}</span>
+            <button type="button" onClick={(e)=>{e.stopPropagation();deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_packing', item.id))}} className="text-stone-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
           </div>
         ))}
       </div>
@@ -375,7 +391,7 @@ function PackingListView({ tripId, items }) {
   );
 }
 
-// --- Todo ListView ---
+// --- Todo List ---
 function TodoListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
   const handleAdd = async (e) => {
@@ -388,14 +404,14 @@ function TodoListView({ tripId, items }) {
       <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><ClipboardList className="text-emerald-600" size={32}/> 代辦事項</h2>
       <form onSubmit={handleAdd} className="flex gap-2 bg-white p-2 rounded-2xl border border-stone-100 shadow-sm">
         <input type="text" value={newItem} onChange={e=>setNewItem(e.target.value)} placeholder="新增代辦..." className="flex-1 p-3 bg-stone-50 rounded-xl outline-none" />
-        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl"><Plus size={24}/></button>
+        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-700 active:scale-95 transition-transform"><Plus size={24}/></button>
       </form>
       <div className="space-y-3">
-        {items.map(i => (
-          <div key={i.id} className="flex items-center bg-white p-4 rounded-xl border border-stone-100 shadow-sm cursor-pointer" onClick={() => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_todo', i.id), { completed: !i.completed })}>
-            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${i.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>{i.completed && <CheckCircle2 size={16} className="text-white"/>}</div>
-            <span className={`flex-1 text-lg ${i.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{i.task}</span>
-            <button type="button" onClick={(e)=>{e.stopPropagation();deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_todo', i.id))}} className="text-stone-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
+        {items.map(item => (
+          <div key={item.id} className="bg-white p-4 rounded-xl border border-stone-100 flex items-center shadow-sm cursor-pointer" onClick={() => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_todo', item.id), { completed: !item.completed })}>
+            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>{item.completed && <CheckCircle2 size={16} className="text-white"/>}</div>
+            <span className={`flex-1 text-lg font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.task}</span>
+            <button type="button" onClick={(e)=>{e.stopPropagation();deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_todo', item.id))}} className="text-stone-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
           </div>
         ))}
       </div>
@@ -403,29 +419,41 @@ function TodoListView({ tripId, items }) {
   );
 }
 
-// --- Wish ListView (吃喝玩樂) ---
+// --- Wish List (吃喝玩樂) ---
 function WishListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
   const [cat, setCat] = useState('吃');
+  const categories = [{ id: '吃', icon: <Utensils size={16}/> }, { id: '喝', icon: <Coffee size={16}/> }, { id: '玩', icon: <Gamepad2 size={16}/> }, { id: '樂', icon: <Smile size={16}/> }];
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    if (!newItem.trim()) return;
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_wishlist'), { tripId, name: newItem.trim(), category: cat, createdAt: serverTimestamp() });
+    setNewItem('');
+  };
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Heart className="text-emerald-600" size={32}/> 願望清單</h2>
       <div className="bg-white p-4 rounded-2xl border border-stone-100 shadow-sm">
-        <div className="flex gap-2 mb-3">
-          {['吃','喝','玩','樂'].map(c => <button key={c} type="button" onClick={()=>setCat(c)} className={`px-4 py-2 rounded-full font-bold text-sm ${cat===c ? 'bg-emerald-600 text-white shadow-md' : 'bg-stone-50 text-stone-500'}`}>{c}</button>)}
+        <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+          {categories.map(c => <button key={c.id} type="button" onClick={()=>setCat(c.id)} className={`px-4 py-2 rounded-full font-bold text-sm transition-all flex items-center gap-1 ${cat===c.id ? 'bg-emerald-600 text-white shadow-md' : 'bg-stone-50 text-stone-500'}`}>{c.icon}{c.id}</button>)}
         </div>
-        <form onSubmit={async (e)=>{e.preventDefault(); if(!newItem.trim())return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_wishlist'), { tripId, name: newItem.trim(), category: cat, createdAt: serverTimestamp() }); setNewItem('');}} className="flex gap-2">
+        <form onSubmit={handleAdd} className="flex gap-2">
           <input type="text" value={newItem} onChange={e=>setNewItem(e.target.value)} placeholder={`想${cat}的地點名稱...`} className="flex-1 p-3 bg-stone-50 rounded-xl outline-none" />
-          <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl"><Plus size={24}/></button>
+          <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-700 active:scale-95 transition-transform"><Plus size={24}/></button>
         </form>
       </div>
       <div className="space-y-3">
-        {items.map(i => (
-          <div key={i.id} className="bg-white p-4 rounded-xl border border-stone-100 shadow-sm flex items-center justify-between">
-            <span className="font-bold text-stone-800">{i.name} <span className="text-xs text-emerald-500 ml-1">[{i.category}]</span></span>
+        {items.map(item => (
+          <div key={item.id} className="bg-white p-4 rounded-xl border border-stone-100 shadow-sm flex items-center justify-between">
+            <div className="flex-1">
+              <span className="font-bold text-stone-800">{item.name} </span>
+              <span className="text-xs bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg font-bold ml-2">{item.category}</span>
+            </div>
             <div className="flex items-center gap-2">
-              <a href={getGoogleMapsLink(i.name)} target="_blank" rel="noreferrer" className="p-3 text-emerald-500 hover:bg-emerald-50 rounded-xl"><MapPin size={20}/></a>
-              <button type="button" onClick={()=>deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_wishlist', i.id))} className="text-stone-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
+              <a href={getGoogleMapsLink(item.name)} target="_blank" rel="noreferrer" className="p-3 text-emerald-500 hover:bg-emerald-50 rounded-xl transition">
+                <Map size={20} />
+              </a>
+              <button type="button" onClick={()=>deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_wishlist', item.id))} className="text-stone-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
             </div>
           </div>
         ))}
@@ -434,7 +462,7 @@ function WishListView({ tripId, items }) {
   );
 }
 
-// --- Itinerary Planning ---
+// --- Itinerary Planning (含 AI) ---
 function ItineraryView({ tripId, items }) {
   const [showAdd, setShowAdd] = useState(false);
   const [loadingAI, setLoadingAI] = useState(false);
@@ -442,9 +470,9 @@ function ItineraryView({ tripId, items }) {
   const handleAI = async () => {
     setLoadingAI(true);
     try {
-      const res = await callGemini(`目的地代碼 ${tripId}。推薦 3 個景點 JSON: [{"title":"名稱","desc":"描述"}]。`);
+      const res = await callGemini(`目的地：${tripId}。推薦 3 個景點或美食 JSON: [{"title":"名稱","desc":"描述"}]。`);
       const start = res.indexOf('['); const end = res.lastIndexOf(']') + 1;
-      if (start !== -1 && end !== -1) setAiS(JSON.parse(res.substring(start, end)));
+      setAiS(JSON.parse(res.substring(start, end)));
     } catch (e) { console.error(e); } finally { setLoadingAI(false); }
   };
   const itItems = items.filter(i => !['flight','train','bus','ship','accommodation'].includes(i.type));
@@ -453,15 +481,15 @@ function ItineraryView({ tripId, items }) {
       <div className="flex justify-between items-end mb-8 flex-wrap gap-2">
         <h2 className="text-3xl font-bold text-emerald-900"><Calendar className="text-emerald-600 inline mr-2"/>行程規劃</h2>
         <div className="flex gap-2">
-          <button type="button" onClick={handleAI} className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-400 text-white rounded-full text-sm font-bold shadow-md sparkle-effect">{loadingAI ? '推薦中...' : '✨ AI 推薦'}</button>
+          <button type="button" onClick={handleAI} className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-400 text-white rounded-full text-sm font-bold shadow-md sparkle-effect">{loadingAI ? '推薦中' : '✨ AI 推薦'}</button>
           <button onClick={()=>setShowAdd(true)} className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg"><Plus size={20}/> 新增行程</button>
         </div>
       </div>
-      {aiS && <div className="bg-emerald-50 p-4 rounded-2xl space-y-2 mb-4">{aiS.map((s,i)=>(<div key={i} className="flex justify-between bg-white p-3 rounded-xl"><div><div className="font-bold text-emerald-900">{s.title}</div><div className="text-xs text-stone-500">{s.desc}</div></div><button type="button" onClick={()=>addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_items'), {tripId, title:s.title, type:'sight', location:s.title, transportMethod:'walk'})} className="text-emerald-600 hover:bg-emerald-50 p-2 rounded-lg"><Plus size={18}/></button></div>))}</div>}
-      {itItems.map(i=>(
-        <div key={i.id} className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex justify-between mb-3">
-          <div><div className="text-xs font-bold text-emerald-600 uppercase mb-1">{i.type}</div><div className="font-bold text-lg">{i.title}</div><div className="text-sm text-stone-400 mt-1 flex items-center gap-1"><Clock size={12}/> {i.datetime || '未定'}</div><div className="text-sm text-stone-500 mt-1 flex items-center gap-1"><MapPin size={12}/> {i.location}</div></div>
-          <button type="button" onClick={()=>deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_items', i.id))}><Trash2 size={18} className="text-stone-300 hover:text-red-500"/></button>
+      {aiS && <div className="bg-emerald-50 p-4 rounded-2xl space-y-2 mb-4">{aiS.map((s,i)=>(<div key={i} className="flex justify-between bg-white p-3 rounded-xl shadow-sm"><div><div className="font-bold text-emerald-900">{s.title}</div><div className="text-xs text-stone-500">{s.desc}</div></div><button type="button" onClick={()=>addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_items'), {tripId, title:s.title, type:'sight', location:s.title, transportMethod:'walk'})} className="text-emerald-600 hover:bg-emerald-50 rounded-lg p-2"><Plus size={18}/></button></div>))}</div>}
+      {itItems.map(item=>(
+        <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex justify-between mb-3">
+          <div><div className="text-xs font-bold text-emerald-600 uppercase mb-1">{item.type}</div><div className="font-bold text-lg">{item.title}</div><div className="text-sm text-stone-400 mt-1 flex items-center gap-1"><Clock size={12}/> {item.datetime || '未定'}</div><div className="text-sm text-stone-500 mt-1 flex items-center gap-1"><MapPin size={12}/> {item.location}</div></div>
+          <button type="button" onClick={()=>deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_items', item.id))}><Trash2 size={18} className="text-stone-300 hover:text-red-500"/></button>
         </div>
       ))}
       {showAdd && <AddItineraryModal tripId={tripId} onClose={()=>setShowAdd(false)} />}
@@ -469,7 +497,7 @@ function ItineraryView({ tripId, items }) {
   );
 }
 
-// --- Transport View ---
+// --- Transport ---
 function TransportView({ tripId, items }) {
   const [showAdd, setShowAdd] = useState(false);
   const tItems = items.filter(i=>['flight','train','bus','ship'].includes(i.type));
@@ -479,16 +507,16 @@ function TransportView({ tripId, items }) {
         <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Train className="text-emerald-600" size={32}/> 交通情報</h2>
         <button onClick={()=>setShowAdd(true)} className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg"><Plus size={20}/> 新增票券</button>
       </div>
-      {tItems.map(i=>(<div key={i.id} className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex justify-between mb-3"><div><div className="text-xs font-bold text-blue-600 uppercase mb-1">{i.type}</div><div className="font-bold text-lg">{i.title}</div><div className="text-sm font-bold text-stone-700 mt-1 flex items-center gap-1"><ArrowRightLeft size={12}/> {i.originDest}</div><div className="text-xs text-stone-400 mt-1">{i.datetime}</div></div><button type="button" onClick={()=>deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_items', i.id))}><Trash2 size={18} className="text-stone-300"/></button></div>))}
+      {tItems.map(item=>(<div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex justify-between mb-3"><div><div className="text-xs font-bold text-blue-600 uppercase mb-1">{item.type}</div><div className="font-bold text-lg">{item.title}</div><div className="text-sm font-bold text-stone-700 mt-1 flex items-center gap-1"><ArrowRightLeft size={12}/> {item.originDest}</div><div className="text-xs text-stone-400 mt-1">{item.datetime}</div></div><button type="button" onClick={()=>deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_items', item.id))}><Trash2 size={18} className="text-stone-300"/></button></div>))}
       {showAdd && <AddTransportModal tripId={tripId} onClose={()=>setShowAdd(false)} />}
     </div>
   );
 }
 
-// --- Accommodation View (更新功能) ---
+// --- Accommodation (含有入住/退房/早餐/行李資訊) ---
 function AccommodationView({ tripId, items }) {
   const [showAdd, setShowAdd] = useState(false);
-  const aItems = items.filter(i => i.type === 'accommodation');
+  const aItems = items.filter(i=>i.type==='accommodation');
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-8">
@@ -496,18 +524,17 @@ function AccommodationView({ tripId, items }) {
         <button onClick={()=>setShowAdd(true)} className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg"><Plus size={20}/> 新增住宿</button>
       </div>
       {aItems.map(i=>(
-        <div key={i.id} className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex justify-between mb-3 group">
+        <div key={i.id} className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex justify-between mb-4 group">
           <div className="flex-1">
             <div className="font-bold text-xl text-stone-800 mb-1">{i.title}</div>
             <div className="text-sm text-stone-500 mb-3 flex items-center gap-1"><MapPin size={14}/> {i.location} <a href={getGoogleMapsLink(i.location)} target="_blank" rel="noreferrer" className="ml-2 text-blue-500 font-bold">地圖</a></div>
-            <div className="grid grid-cols-2 gap-4 bg-stone-50 p-3 rounded-xl border border-stone-50">
-              <div className="text-xs text-stone-500"><strong>入住時間:</strong> {i.checkInTime}</div>
-              <div className="text-xs text-stone-500"><strong>退房時間:</strong> {i.checkOutTime}</div>
-              <div className="text-xs flex items-center gap-1"><strong>早餐:</strong> {i.hasBreakfast === '是' ? <span className="text-emerald-600 flex items-center"><CheckCircle2 size={12} className="mr-0.5"/>有提供</span> : <span className="text-stone-400">無</span>}</div>
-              <div className="text-xs flex items-center gap-1"><strong>行李寄放:</strong> {i.canStoreLuggage === '是' ? <span className="text-emerald-600 flex items-center"><CheckCircle2 size={12} className="mr-0.5"/>可寄放</span> : <span className="text-stone-400">不可</span>}</div>
+            <div className="grid grid-cols-2 gap-3 bg-stone-50 p-4 rounded-2xl border border-stone-50 shadow-inner">
+              <div className="text-xs text-stone-600"><strong>入住時間:</strong> {i.checkInTime}</div><div className="text-xs text-stone-600"><strong>退房時間:</strong> {i.checkOutTime}</div>
+              <div className="text-xs flex items-center gap-1"><strong>早餐服務:</strong> {i.hasBreakfast==='是'?<span className="text-emerald-600 flex items-center font-bold"><CoffeeIcon size={12} className="mr-0.5"/>含早餐</span>:'無'}</div>
+              <div className="text-xs flex items-center gap-1"><strong>行李寄放:</strong> {i.canStoreLuggage==='是'?<span className="text-emerald-600 flex items-center font-bold"><Briefcase size={12} className="mr-0.5"/>可寄放</span>:'不可'}</div>
             </div>
           </div>
-          <button type="button" onClick={()=>deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_items', i.id))} className="text-stone-300 hover:text-red-500 transition-colors pl-4"><Trash2 size={20}/></button>
+          <button type="button" onClick={()=>deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_items', i.id))} className="pl-4 text-stone-300 hover:text-red-500"><Trash2 size={20}/></button>
         </div>
       ))}
       {showAdd && <AddAccommodationModal tripId={tripId} onClose={()=>setShowAdd(false)} />}
@@ -515,7 +542,7 @@ function AccommodationView({ tripId, items }) {
   );
 }
 
-// --- Tools & Assistant (完整 1023 行規模資料) ---
+// --- Tools & Assistant (完整資料) ---
 function ToolsView({ tripId }) {
   const [tab, setTab] = useState('phrases');
   return (
@@ -541,7 +568,7 @@ function AIAssistantView({ tripId }) {
     try {
       const response = await callGemini(`目的地：${tripId}。用戶問：${userMsg}`);
       setMessages(prev => [...prev, { role: 'ai', text: response || "抱歉，我暫時無法回答。" }]);
-    } catch (e) { setMessages(prev => [...prev, { role: 'ai', text: "連線錯誤，請稍後再試。" }]); } finally { setLoading(false); }
+    } catch (e) { setMessages(prev => [...prev, { role: 'ai', text: "連線超時，請稍後再試。" }]); } finally { setLoading(false); }
   };
   return (
     <div className="flex flex-col h-[500px] bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden animate-in fade-in">
@@ -559,10 +586,12 @@ function AIAssistantView({ tripId }) {
 
 function JapanesePhrases() {
   const categories = { 
-    "基礎": ["こんにちは (你好)", "おはようございます (早安)", "こんばんは (晚安)", "ありがとうございます (謝謝)", "すみません (不好意思/對不起)", "お願いします (拜託了)", "失礼します (失禮了)", "さようなら (再見)"],
+    "打招呼": ["こんにちは (你好)", "ありがとうございます (謝謝)", "すみません (不好意思)", "お願いします (拜託了)", "失礼します (打擾了)", "さようなら (再見)"],
+    "出入境": ["パスポートを見せてください (請出示護照)", "入国カードはどこですか (入境卡在哪裡)", "観光で來ました (我是來觀光的)", "滯在期間は五日です (預計停留五天)"],
     "交通": ["駅はどこですか (車站在哪裡)", "切符売り場はどこですか (售票處在哪裡)", "この電車は東京に行きますか (這班車去東京嗎)", "チケットをください (請給我票)"],
-    "餐廳": ["メニューをください (請給我菜單)", "お会計をお願いします (請結帳)", "お水をください (請給我水)", "とても美味しいです (很好吃)"],
-    "購物": ["これはいくらですか (這個多少錢)", "これをください (我要這個)", "クレジットカードは使えますか (可以刷卡嗎)", "免税できますか (可以免稅嗎)"]
+    "餐廳": ["メニューをください (請給我菜單)", "お會計をお願いします (請結帳)", "おすすめは何ですか (有什麼推薦的)", "二人です (兩位)", "とても美味しいです (非常好吃)"],
+    "購物": ["これはいくらですか (這個多少錢)", "これをください (我要這個)", "クレジットカードは使えますか (可以用信用卡嗎)", "免稅できますか (可以免稅嗎)"],
+    "住宿": ["チェックインをお願いします (我要辦理入住)", "Wi-Fiのパスワードは何ですか (Wi-Fi密碼)", "荷物を預かってくれませんか (可以幫我寄放行李嗎)", "チェックアウトをお願いします (我要退房)"]
   };
   return (
     <div className="grid gap-6">
@@ -587,22 +616,31 @@ function JapanesePhrases() {
 }
 
 function GojuonChart() {
-  const hira = [['あ','い','う','え','お'], ['か','き','く','け','こ'], ['さ','し','す','せ','そ'], ['た','ち','つ','て','と'], ['な','に','ぬ','ね','の']];
+  const hira = [['あ','い','う','え','お'], ['か','き','く','け','こ'], ['さ','し','す','せ','そ'], ['た','ち','つ','て','と'], ['な','に','ぬ','ね','の'], ['は','ひ','ふ','へ','ほ'], ['ま','み','む','め','も'], ['や','','ゆ','','よ'], ['ら','り','る','れ','ろ'], ['わ','','','','を'], ['ん','','','','']];
+  const kata = [['ア','イ','ウ','エ','オ'], ['カ','キ','ク','ケ','コ'], ['サ','シ','ス','セ','ソ'], ['タ','チ','ツ','特','ト'], ['ナ','ニ','ヌ','ネ','ノ'], ['ハ','ヒ','フ','ヘ','ホ'], ['マ','ミ','ム','メ','モ'], ['ヤ','','ユ','','ヨ'], ['ラ','リ','ル','レ','ロ'], ['ワ','','','','ヲ'], ['ン','','','','']];
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100">
-      <h3 className="font-bold text-xl text-emerald-800 mb-4 border-l-4 border-emerald-500 pl-3">五十音練習表</h3>
-      <div className="grid grid-cols-5 gap-3">
-        {hira.flat().map((c, i) => <div key={i} className={`p-3 rounded-lg text-center font-bold ${c ? 'bg-emerald-50 text-emerald-900 shadow-sm' : ''}`}>{c}</div>)}
+    <div className="space-y-8">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100">
+        <h3 className="font-bold text-xl text-emerald-800 mb-4 border-l-4 border-emerald-500 pl-3">平假名 (Hiragana)</h3>
+        <div className="grid grid-cols-5 gap-3">
+          {hira.flat().map((c, i) => <div key={i} className={`p-3 rounded-lg text-center font-bold ${c ? 'bg-emerald-50 text-emerald-900 shadow-sm' : ''}`}>{c}</div>)}
+        </div>
+      </div>
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100">
+        <h3 className="font-bold text-xl text-orange-800 mb-4 border-l-4 border-orange-500 pl-3">片假名 (Katakana)</h3>
+        <div className="grid grid-cols-5 gap-3">
+          {kata.flat().map((c, i) => <div key={i} className={`p-3 rounded-lg text-center font-bold ${c ? 'bg-orange-50 text-orange-900 shadow-sm' : ''}`}>{c}</div>)}
+        </div>
       </div>
     </div>
   );
 }
 
-// --- Modals ---
+// --- Modals (還原所有詳細欄位) ---
 function AddTransportModal({ tripId, onClose }) { 
-  const [f, setF] = useState({ title: '', datetime: '', type: 'flight', originDest: '', seatInfo: '' }); 
+  const [f, setF] = useState({ title: '', datetime: '', type: 'flight', originDest: '' }); 
   const sub = async (e) => { e.preventDefault(); await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_items'), { ...f, tripId }); onClose(); }; 
-  const inputClass = "w-full p-3 bg-stone-50 border border-stone-200 rounded-xl focus:border-emerald-500 outline-none transition";
+  const inputClass = "w-full p-3 bg-stone-50 border rounded-xl focus:border-emerald-500 outline-none";
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl">
@@ -610,52 +648,35 @@ function AddTransportModal({ tripId, onClose }) {
         <form onSubmit={sub} className="space-y-4">
           <select className={inputClass} value={f.type} onChange={e=>setF({...f, type:e.target.value})}><option value="flight">機票</option><option value="train">火車票</option><option value="bus">巴士</option><option value="ship">船票</option></select>
           <input type="datetime-local" className={inputClass} value={f.datetime} onChange={e=>setF({...f, datetime:e.target.value})} required />
-          <input className={inputClass} placeholder="票券名稱 (例如: 樂桃航空)" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required />
+          <input className={inputClass} placeholder="票券名稱 (例如: 樂桃航空 MM860)" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required />
           <input className={inputClass} placeholder="起訖地點 (例如: 台北TPE >>> 東京NRT)" value={f.originDest} onChange={e=>setF({...f, originDest:e.target.value})} required />
-          <div className="flex gap-2 pt-2"><button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 text-stone-500 rounded-xl font-bold">取消</button><button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg">確認</button></div>
+          <div className="flex gap-2 pt-2"><button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 text-stone-500 rounded-xl font-bold">取消</button><button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg transition active:scale-95">確認新增</button></div>
         </form>
       </div>
     </div>
   ); 
 }
 
-// --- 更新後的住宿 MODAL (含早餐、行李選項) ---
 function AddAccommodationModal({ tripId, onClose }) { 
-  const [f, setF] = useState({ 
-    title: '', type: 'accommodation', location: '', 
-    checkInTime: '15:00', checkOutTime: '11:00',
-    hasBreakfast: '否', canStoreLuggage: '否'
-  }); 
+  const [f, setF] = useState({ title: '', type: 'accommodation', location: '', checkInTime: '15:00', checkOutTime: '11:00', hasBreakfast: '否', canStoreLuggage: '否' }); 
   const sub = async (e) => { e.preventDefault(); await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_items'), { ...f, tripId }); onClose(); }; 
   const inputClass = "w-full p-3 bg-stone-50 border border-stone-200 rounded-xl focus:border-emerald-500 outline-none transition";
-  const selectLabel = "block text-xs font-bold text-stone-400 mb-1 ml-1";
-
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
         <h3 className="font-bold text-xl mb-4 text-emerald-900">新增住宿登錄</h3>
         <form onSubmit={sub} className="space-y-4">
-          <div><label className={selectLabel}>住宿名稱</label><input className={inputClass} placeholder="飯店名稱" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required /></div>
-          <div><label className={selectLabel}>地址 (地圖連動導航)</label><input className={inputClass} placeholder="輸入地址或關鍵字" value={f.location} onChange={e=>setF({...f, location:e.target.value})} required /></div>
+          <div><label className="text-xs font-bold text-stone-400 mb-1 ml-1">住宿名稱</label><input className={inputClass} placeholder="飯店名稱" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required /></div>
+          <div><label className="text-xs font-bold text-stone-400 mb-1 ml-1">地址 (地圖連動)</label><input className={inputClass} placeholder="地址或地點" value={f.location} onChange={e=>setF({...f, location:e.target.value})} required /></div>
           <div className="flex gap-2">
-            <div className="w-1/2"><label className={selectLabel}>入住時間</label><input type="time" className={inputClass} value={f.checkInTime} onChange={e=>setF({...f, checkInTime:e.target.value})} /></div>
-            <div className="w-1/2"><label className={selectLabel}>退房時間</label><input type="time" className={inputClass} value={f.checkOutTime} onChange={e=>setF({...f, checkOutTime:e.target.value})} /></div>
+            <div className="w-1/2"><label className="text-xs font-bold text-stone-400">入住</label><input type="time" className={inputClass} value={f.checkInTime} onChange={e=>setF({...f, checkInTime:e.target.value})} /></div>
+            <div className="w-1/2"><label className="text-xs font-bold text-stone-400">退房</label><input type="time" className={inputClass} value={f.checkOutTime} onChange={e=>setF({...f, checkOutTime:e.target.value})} /></div>
           </div>
           <div className="flex gap-2">
-            <div className="w-1/2">
-              <label className={selectLabel}>含有早餐</label>
-              <select className={inputClass} value={f.hasBreakfast} onChange={e=>setF({...f, hasBreakfast:e.target.value})}>
-                <option value="是">是</option><option value="否">否</option>
-              </select>
-            </div>
-            <div className="w-1/2">
-              <label className={selectLabel}>可寄放行李</label>
-              <select className={inputClass} value={f.canStoreLuggage} onChange={e=>setF({...f, canStoreLuggage:e.target.value})}>
-                <option value="是">是</option><option value="否">否</option>
-              </select>
-            </div>
+            <div className="w-1/2"><label className="text-xs font-bold text-stone-400">含早餐</label><select className={inputClass} value={f.hasBreakfast} onChange={e=>setF({...f, hasBreakfast:e.target.value})}><option value="是">是</option><option value="否">否</option></select></div>
+            <div className="w-1/2"><label className="text-xs font-bold text-stone-400">行李寄放</label><select className={inputClass} value={f.canStoreLuggage} onChange={e=>setF({...f, canStoreLuggage:e.target.value})}><option value="是">是</option><option value="否">否</option></select></div>
           </div>
-          <div className="flex gap-2 pt-2"><button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 text-stone-500 rounded-xl font-bold">取消</button><button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg transition active:scale-95">確認新增</button></div>
+          <div className="flex gap-2 pt-2"><button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 text-stone-500 rounded-xl font-bold">取消</button><button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-transform">確認新增</button></div>
         </form>
       </div>
     </div>
@@ -665,16 +686,17 @@ function AddAccommodationModal({ tripId, onClose }) {
 function AddItineraryModal({ tripId, onClose }) { 
   const [f, setF] = useState({ title: '', datetime: '', type: 'sight', location: '' }); 
   const sub = async (e) => { e.preventDefault(); await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_items'), { ...f, tripId }); onClose(); }; 
-  const inputClass = "w-full p-3 bg-stone-50 border border-stone-200 rounded-xl focus:border-emerald-500 outline-none transition";
+  const inputClass = "w-full p-3 bg-stone-50 border rounded-xl focus:border-emerald-500 outline-none transition";
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl">
-        <h3 className="font-bold text-xl mb-4 text-emerald-900">新增行程規劃</h3>
+        <h3 className="font-bold text-xl mb-4 text-emerald-900">新增景點行程</h3>
         <form onSubmit={sub} className="space-y-4">
           <select className={inputClass} value={f.type} onChange={e=>setF({...f, type:e.target.value})}><option value="sight">景點</option><option value="food">餐廳</option><option value="shopping">購物</option></select>
-          <input className={inputClass} placeholder="名稱" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required/>
+          <input className={inputClass} placeholder="景點名稱" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required/>
           <input type="datetime-local" className={inputClass} value={f.datetime} onChange={e=>setF({...f, datetime:e.target.value})} required/>
-          <div className="flex gap-2 pt-2"><button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 text-stone-500 rounded-xl font-bold">取消</button><button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg">確認</button></div>
+          <input className={inputClass} placeholder="詳細地址" value={f.location} onChange={e=>setF({...f, location:e.target.value})} required/>
+          <div className="flex gap-2 pt-2"><button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 text-stone-500 rounded-xl font-bold">取消</button><button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg transition">確認</button></div>
         </form>
       </div>
     </div>
@@ -691,11 +713,11 @@ function ExpenseView({ tripId, expenses }) {
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
       <div className="flex justify-between items-end mb-8 flex-wrap gap-2">
-        <div><h2 className="text-3xl font-bold text-emerald-900 flex gap-2 items-center"><Wallet className="text-emerald-600" size={32}/> 記帳分帳</h2><div className="mt-2 text-stone-500 font-bold">總支出約 <span className="text-emerald-600 text-2xl font-mono">NT$ {Math.round(totalTWD).toLocaleString()}</span></div></div>
-        <button onClick={() => setShowAdd(true)} className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg transition active:scale-95"><Plus size={20} /> 新增支出 / 分帳</button>
+        <div><h2 className="text-3xl font-bold text-emerald-900 flex gap-2 items-center"><Wallet className="text-emerald-600" size={32}/> 記帳分帳</h2><div className="mt-2 text-stone-500 font-bold">預估總支出約 <span className="text-emerald-600 text-2xl font-mono">NT$ {Math.round(totalTWD).toLocaleString()}</span></div></div>
+        <button onClick={() => setShowAdd(true)} className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg transition active:scale-95"><Plus size={20} /> 新增記帳 / 分帳</button>
       </div>
       <div className="bg-white rounded-[32px] shadow-sm border border-stone-100 divide-y divide-stone-100 overflow-hidden">
-        {expenses.map(exp => (
+        {expenses.length === 0 ? <div className="p-10 text-center text-stone-400">目前沒有支出紀錄</div> : expenses.map(exp => (
           <div key={exp.id} className="p-5 flex justify-between items-center">
             <div><h4 className="font-bold text-stone-800 text-lg">{exp.title}</h4><div className="text-sm text-stone-500">{exp.payer} 付款</div></div>
             <div className="flex items-center gap-4"><div className="font-mono font-bold text-stone-800 text-lg">{exp.currency} {Number(exp.amount).toLocaleString()}</div><button onClick={()=>deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trip_expenses', exp.id))} className="text-stone-300 hover:text-red-500 transition-colors p-2"><Trash2 size={20}/></button></div>
@@ -713,9 +735,7 @@ function AddExpenseModal({ tripId, onClose }) {
   const [f, setF] = useState({ title: '', amount: '', payer: '', currency: defaultCurrency });
   const [count, setCount] = useState(2);
   const sub = async (e) => { 
-    e.preventDefault(); 
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_expenses'), { ...f, tripId, createdAt: serverTimestamp() }); 
-    onClose(); 
+    e.preventDefault(); await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_expenses'), { ...f, tripId, createdAt: serverTimestamp() }); onClose(); 
   };
   const inputStyle = "w-full p-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-emerald-500 transition";
   const perPerson = f.amount && count ? (parseFloat(f.amount) / parseInt(count)).toFixed(1) : 0;
@@ -726,9 +746,12 @@ function AddExpenseModal({ tripId, onClose }) {
         <div className="flex bg-stone-100 p-1 rounded-xl mb-4"><button type="button" onClick={()=>setActiveTab('add')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${activeTab==='add' ? 'bg-white shadow text-emerald-700' : 'text-stone-500'}`}>一般記帳</button><button type="button" onClick={()=>setActiveTab('split')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${activeTab==='split' ? 'bg-white shadow text-emerald-700' : 'text-stone-500'}`}>分帳計算</button></div>
         <form onSubmit={sub} className="space-y-4">
           <input type="text" required placeholder="項目名稱" className={inputStyle} value={f.title} onChange={e=>setF({...f, title:e.target.value})}/>
-          <div className="flex gap-2"><select className="w-1/3 p-3 bg-stone-50 border border-stone-200 rounded-xl" value={f.currency} onChange={e=>setF({...f, currency:e.target.value})}><option value="TWD">TWD</option><option value="JPY">JPY</option><option value="KRW">KRW</option><option value="USD">USD</option><option value="EUR">EUR</option></select><input type="number" required placeholder="金額" className="w-2/3 p-3 bg-stone-50 border border-stone-200 rounded-xl" value={f.amount} onChange={e=>setF({...f, amount:e.target.value})}/></div>
-          {activeTab === 'add' ? (<input type="text" required placeholder="付款人名稱" className={inputStyle} value={f.payer} onChange={e=>setF({...f, payer:e.target.value})}/>) : (<div className="bg-emerald-50 p-4 rounded-xl text-center"><div className="flex items-center justify-center gap-4 mb-2"><button type="button" onClick={()=>setCount(Math.max(1, count-1))} className="w-8 h-8 rounded-full bg-white shadow font-bold">-</button><span className="font-mono text-xl font-bold">{count} 人</span><button type="button" onClick={()=>setCount(count+1)} className="w-8 h-8 rounded-full bg-white shadow font-bold">+</button></div><div className="text-emerald-600 font-bold text-lg">每人預估 {f.currency} {Number(perPerson).toLocaleString()}</div></div>)}
-          <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl mt-2 shadow-lg">確認並儲存</button>
+          <div className="flex gap-2">
+            <select className="w-1/3 p-3 bg-stone-50 border rounded-xl" value={f.currency} onChange={e=>setF({...f, currency:e.target.value})}><option value="TWD">TWD</option><option value="JPY">JPY</option><option value="KRW">KRW</option><option value="USD">USD</option><option value="EUR">EUR</option></select>
+            <input type="number" required placeholder="金額" className="w-2/3 p-3 bg-stone-50 border rounded-xl" value={f.amount} onChange={e=>setF({...f, amount:e.target.value})}/>
+          </div>
+          {activeTab === 'add' ? (<input type="text" required placeholder="付款人" className={inputStyle} value={f.payer} onChange={e=>setF({...f, payer:e.target.value})}/>) : (<div className="bg-emerald-50 p-4 rounded-xl text-center"><div className="flex items-center justify-center gap-4 mb-2"><button type="button" onClick={()=>setCount(Math.max(1, count-1))} className="w-8 h-8 rounded-full bg-white shadow font-bold">-</button><span className="font-mono text-xl font-bold">{count} 人</span><button type="button" onClick={()=>setCount(count+1)} className="w-8 h-8 rounded-full bg-white shadow font-bold">+</button></div><div className="text-emerald-600 font-bold text-lg">每人預估 {f.currency} {Number(perPerson).toLocaleString()}</div></div>)}
+          <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl mt-2 shadow-lg transition active:scale-95">確認並儲存</button>
         </form>
       </div>
     </div>

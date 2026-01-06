@@ -1,5 +1,5 @@
 /* global __firebase_config, __app_id, __initial_auth_token */
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -10,7 +10,7 @@ import {
   Languages, PieChart, Luggage, ClipboardList, Heart, NotebookPen, Volume2, Coffee, 
   Briefcase, 
   Gamepad2, Smile, Home, MinusCircle, Car, Footprints, Anchor, Gift, Map, Armchair, Sparkles, Send,
-  UserPlus, UserMinus
+  UserPlus, UserMinus, Wifi, MonitorSmartphone
 } from 'lucide-react';
 
 // --- 安全讀取 Firebase 設定 ---
@@ -55,9 +55,17 @@ const detectCurrency = (id) => {
 
 // --- Gemini API Helper ---
 const callGemini = async (prompt, systemInstruction = "") => {
+  // 【重要】請在此處填入您的 Google Gemini API Key
+  // 例如：const apiKey = "AIzaSyDHDWII7UZyTtsTc2LDDXuCn3H-aM_buHY";
   const apiKey = ""; 
+  
+  if (!apiKey) {
+    console.warn("未偵測到 API Key，請在程式碼中設定 apiKey 以啟用 AI 功能。");
+    return "系統提示：目前尚未設定 API Key，請檢查程式碼設定以啟用 AI 助手功能。";
+  }
+
   let delay = 1000;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 3; i++) {
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: 'POST',
@@ -67,11 +75,11 @@ const callGemini = async (prompt, systemInstruction = "") => {
           systemInstruction: { parts: [{ text: systemInstruction || "你是一個專業的旅遊助手，請使用繁體中文回答。" }] }
         })
       });
-      if (!response.ok) throw new Error('Gemini API 請求失敗');
+      if (!response.ok) throw new Error(`API 請求失敗: ${response.status}`);
       const data = await response.json();
       return data.candidates?.[0]?.content?.parts?.[0]?.text;
     } catch (error) {
-      if (i === 4) throw error;
+      if (i === 2) throw error;
       await new Promise(resolve => setTimeout(resolve, delay));
       delay *= 2;
     }
@@ -153,7 +161,7 @@ export default function App() {
   return <TripDashboard tripId={tripId} userId={user.uid} onLeave={() => setIsJoined(false)} />;
 }
 
-// --- 入口頁面 ---
+// --- 入口頁面 (強調跨裝置連動) ---
 function Onboarding({ onJoin, initialId }) {
   const [input, setInput] = useState(initialId);
   return (
@@ -165,10 +173,21 @@ function Onboarding({ onJoin, initialId }) {
           </div>
         </div>
         <h1 className="text-3xl font-bold text-emerald-900 mb-2 tracking-tight">旅伴 TripMate</h1>
-        <p className="text-stone-600 mb-8 font-medium">你的智能旅遊規劃助手</p>
+        <p className="text-stone-600 mb-8 font-medium">即時連動、多人協作的旅遊助手</p>
+        
+        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 mb-6 text-left">
+          <h3 className="font-bold text-emerald-800 flex items-center gap-2 text-sm mb-1">
+            <MonitorSmartphone size={16}/> 如何跨裝置連動？
+          </h3>
+          <p className="text-xs text-emerald-700 leading-relaxed">
+            只要在不同手機或電腦輸入<span className="font-bold underline">完全相同</span>的「旅遊代碼」，
+            所有行程、記帳與清單都會即時同步顯示！
+          </p>
+        </div>
+
         <div className="space-y-5">
           <div className="text-left">
-            <label className="block text-sm font-bold text-emerald-800 mb-2 ml-1">旅遊代碼 (Trip ID)</label>
+            <label className="block text-sm font-bold text-emerald-800 mb-2 ml-1">設定旅遊代碼 (Trip ID)</label>
             <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="例如: Tokyo2024" className="w-full px-5 py-4 bg-stone-50 border-2 border-stone-100 rounded-2xl focus:border-emerald-500 outline-none text-lg font-medium text-emerald-900"/>
           </div>
           <button onClick={() => onJoin(input)} className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-bold py-4 rounded-2xl transition shadow-lg text-lg flex items-center justify-center gap-2 btn-active-effect">開始旅程 <ChevronRight size={20} /></button>
@@ -188,6 +207,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
   const [todoItems, setTodoItems] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
 
+  // 資料同步核心：只要 tripId 相同，不同裝置會監聽同一份 Firestore 資料
   useEffect(() => {
     if (!tripId || !userId) return;
     const path = ['artifacts', appId, 'public', 'data'];
@@ -206,7 +226,10 @@ function TripDashboard({ tripId, userId, onLeave }) {
       <main className="flex-1 flex flex-col overflow-y-auto bg-[#F5F7F4] relative">
         <div className="sticky top-0 z-30 bg-white shadow-md p-4 flex justify-between items-center md:hidden border-b border-stone-100">
           <h1 className="text-xl font-bold text-emerald-900 flex items-center gap-2"><Palmtree size={24} className="text-emerald-500" /> TripMate</h1>
-          <span className="text-xs font-mono font-bold text-stone-500 bg-stone-100 px-3 py-1 rounded-full uppercase">{tripId}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1 font-bold animate-pulse"><Wifi size={10}/> 連線中</span>
+            <span className="text-xs font-mono font-bold text-stone-500 bg-stone-100 px-3 py-1 rounded-full uppercase">{tripId}</span>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-32">
           {activeTab === 'home' && <HomeView items={items} wishlistItems={wishlistItems} />}
@@ -263,7 +286,6 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
 // --- 視圖組件: 首頁 ---
 function HomeView({ items, wishlistItems }) {
   const timelineItems = items.sort((a, b) => (a.datetime || a.checkInTime || '9999').localeCompare(b.datetime || b.checkInTime || '9999'));
-  
   const wishlistCategories = [
     { id: '吃', icon: <Utensils size={18}/>, color: 'text-orange-600', bgColor: 'bg-orange-50' },
     { id: '喝', icon: <Coffee size={18}/>, color: 'text-blue-600', bgColor: 'bg-blue-50' },
@@ -273,7 +295,6 @@ function HomeView({ items, wishlistItems }) {
 
   return (
     <div className="space-y-12 max-w-6xl mx-auto pb-10">
-      {/* 行程時間軸 */}
       <section>
         <h2 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3 mb-6">
           <Home className="text-emerald-600" size={32}/> 旅程時間軸
@@ -302,50 +323,32 @@ function HomeView({ items, wishlistItems }) {
         </div>
       </section>
 
-      {/* 願望清單導覽看板 (新增功能) */}
       <section className="pt-8 border-t border-stone-200">
         <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3 mb-8">
           <Heart className="text-pink-500" size={32}/> 願望地圖指南
         </h2>
-        
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {wishlistCategories.map(cat => {
             const catItems = wishlistItems.filter(item => item.category === cat.id);
             return (
               <div key={cat.id} className="flex flex-col space-y-4">
-                {/* 類別標頭 */}
                 <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl ${cat.bgColor} border-b-4 border-emerald-500/20`}>
                   <span className={cat.color}>{cat.icon}</span>
                   <span className="font-bold text-stone-800 text-lg">想{cat.id}的</span>
                   <span className="ml-auto bg-white/50 px-2 py-0.5 rounded-full text-xs font-bold text-stone-500">{catItems.length}</span>
                 </div>
-
-                {/* 項目列表 */}
                 <div className="space-y-4">
                   {catItems.length === 0 ? (
                     <div className="text-center py-8 bg-white/30 rounded-2xl border border-dashed border-stone-200 text-stone-300 text-xs font-bold">尚無願望</div>
                   ) : catItems.map(item => (
                     <div key={item.id} className="bg-white rounded-[24px] shadow-md border border-stone-100 overflow-hidden hover:shadow-xl transition group">
-                      {/* 小地圖預覽 */}
                       <div className="h-28 bg-stone-100 relative">
-                        <iframe 
-                          title={item.name}
-                          width="100%" 
-                          height="100%" 
-                          loading="lazy"
-                          style={{ border: 0, filter: 'grayscale(0.2)' }}
-                          src={`https://maps.google.com/maps?q=${encodeURIComponent(item.name)}&t=&z=14&ie=UTF-8&iwloc=&output=embed`}
-                        ></iframe>
+                        <iframe title={item.name} width="100%" height="100%" loading="lazy" style={{ border: 0, filter: 'grayscale(0.2)' }} src={`https://maps.google.com/maps?q=${encodeURIComponent(item.name)}&t=&z=14&ie=UTF-8&iwloc=&output=embed`}></iframe>
                         <div className="absolute inset-0 bg-transparent cursor-pointer" onClick={() => window.open(getNavigationLink(item.name), '_blank')}></div>
                       </div>
-                      
-                      {/* 內容區 */}
                       <div className="p-4">
                         <h4 className="font-bold text-stone-800 text-sm truncate mb-3">{item.name}</h4>
-                        <button 
-                          onClick={() => window.open(getNavigationLink(item.name), '_blank')}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-bold hover:bg-emerald-600 hover:text-white transition group-hover:scale-[1.02] active:scale-95"
-                        >
+                        <button onClick={() => window.open(getNavigationLink(item.name), '_blank')} className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-bold hover:bg-emerald-600 hover:text-white transition group-hover:scale-[1.02] active:scale-95">
                           <Navigation size={14} className="animate-pulse" /> 即時導覽
                         </button>
                       </div>
@@ -361,28 +364,19 @@ function HomeView({ items, wishlistItems }) {
   );
 }
 
-// --- 視圖組件: 行李清單 ---
+// --- 視圖組件: 行李清單 (已移除 AI) ---
 function PackingListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
-  const [loadingAI, setLoadingAI] = useState(false);
   const handleAdd = async (e) => {
     e.preventDefault(); if (!newItem.trim()) return;
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_packing'), { tripId, item: newItem.trim(), completed: false, createdAt: serverTimestamp() });
     setNewItem('');
   };
-  const handleAI = async () => {
-    setLoadingAI(true);
-    try {
-      const res = await callGemini(`旅遊代碼為 ${tripId}。請建議 5 個重要行李，僅輸出項目名稱並用逗號隔開。不要有額外文字。`);
-      const suggestions = (res || "").split(/[,，]/).map(s => s.trim().replace(/[0-9.]/g, ''));
-      for (const s of suggestions) { if (s && s.length > 0) await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_packing'), { tripId, item: s, completed: false, createdAt: serverTimestamp() }); }
-    } finally { setLoadingAI(false); }
-  };
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-end mb-4">
         <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Luggage className="text-emerald-600" size={32}/> 行李清單</h2>
-        <button onClick={handleAI} disabled={loadingAI} className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-400 text-white rounded-full text-sm font-bold shadow-md sparkle-effect">{loadingAI ? '推薦中' : '✨ AI 建議'}</button>
+        {/* AI 按鈕已移除 */}
       </div>
       <form onSubmit={handleAdd} className="flex gap-2 bg-white p-2 rounded-2xl border border-stone-100 shadow-sm">
         <input type="text" value={newItem} onChange={e=>setNewItem(e.target.value)} placeholder="新增行李..." className="flex-1 p-3 bg-stone-50 rounded-xl outline-none" />
@@ -471,30 +465,20 @@ function WishListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 行程規劃 ---
+// --- 視圖組件: 行程規劃 (已移除 AI) ---
 function ItineraryView({ tripId, items }) {
   const [showAdd, setShowAdd] = useState(false);
-  const [loadingAI, setLoadingAI] = useState(false);
-  const [aiS, setAiS] = useState(null);
-  const handleAI = async () => {
-    setLoadingAI(true);
-    try {
-      const res = await callGemini(`目的地：${tripId}。推薦 3 個景點或美食 JSON: [{"title":"名稱","desc":"描述"}]。`);
-      const start = res.indexOf('['); const end = res.lastIndexOf(']') + 1;
-      setAiS(JSON.parse(res.substring(start, end)));
-    } catch (e) { console.error(e); } finally { setLoadingAI(false); }
-  };
+  // AI 相關功能已移除
   const itItems = items.filter(i => !['flight','train','bus','ship','accommodation'].includes(i.type));
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-end mb-8 flex-wrap gap-2">
         <h2 className="text-3xl font-bold text-emerald-900"><Calendar className="text-emerald-600 inline mr-2"/>行程規劃</h2>
         <div className="flex gap-2">
-          <button onClick={handleAI} className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-400 text-white rounded-full text-sm font-bold shadow-md sparkle-effect">{loadingAI ? '推薦中' : '✨ AI 建議'}</button>
+          {/* AI 按鈕已移除 */}
           <button onClick={()=>setShowAdd(true)} className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg"><Plus size={20}/> 新增行程</button>
         </div>
       </div>
-      {aiS && <div className="bg-emerald-50 p-4 rounded-2xl space-y-2 mb-4">{aiS.map((s,i)=>(<div key={i} className="flex justify-between bg-white p-3 rounded-xl shadow-sm"><div><div className="font-bold text-emerald-900">{s.title}</div><div className="text-xs text-stone-500">{s.desc}</div></div><button onClick={()=>addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trip_items'), {tripId, title:s.title, type:'sight', location:s.title})} className="text-emerald-600 p-2"><Plus size={18}/></button></div>))}</div>}
       {itItems.map(item=>(
         <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex justify-between mb-3">
           <div><div className="text-xs font-bold text-emerald-600 uppercase mb-1">{item.type}</div><div className="font-bold text-lg">{item.title}</div><div className="text-sm text-stone-400 mt-1 flex items-center gap-1"><Clock size={12}/> {item.datetime || '未定'}</div><div className="text-sm text-stone-500 mt-1 flex items-center gap-1"><MapPin size={12}/> {item.location}</div></div>
@@ -571,39 +555,79 @@ function AccommodationView({ tripId, items }) {
 function ToolsView({ tripId }) {
   const [tab, setTab] = useState('phrases');
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Settings size={32}/> 旅遊工具</h2>
-      <div className="flex gap-4 border-b border-stone-200">
+    <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">
+      <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3 flex-shrink-0"><Settings size={32}/> 旅遊工具</h2>
+      <div className="flex gap-4 border-b border-stone-200 mb-4 flex-shrink-0">
         {['phrases', 'gojuon', 'ai'].map(t => (<button key={t} onClick={()=>setTab(t)} className={`pb-2 font-bold transition-colors ${tab===t ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-stone-400'}`}>{t==='phrases' ? '日語會話' : t==='gojuon' ? '五十音' : '✨ AI 助手'}</button>))}
       </div>
-      {tab==='phrases' && <JapanesePhrases />}
-      {tab==='gojuon' && <GojuonChart />}
-      {tab==='ai' && <AIAssistantView tripId={tripId} />}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {tab==='phrases' && <JapanesePhrases />}
+        {tab==='gojuon' && <GojuonChart />}
+        {tab==='ai' && <AIAssistantView tripId={tripId} />}
+      </div>
     </div>
   );
 }
 
-// --- 子組件: AI 助手 ---
+// --- 子組件: AI 助手 (CSS修正 + Key說明) ---
 function AIAssistantView({ tripId }) {
   const [queryText, setQueryText] = useState('');
   const [messages, setMessages] = useState([{ role: 'ai', text: `你好！我是你的 ✨ AI 旅遊助手。你可以問我關於 ${tripId} 的文化、天氣或幫你翻譯。` }]);
   const [loading, setLoading] = useState(false);
+  // 新增 ref 以自動捲動到底部
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   const handleSend = async () => {
     if (!queryText.trim() || loading) return;
-    const userMsg = queryText; setMessages(prev => [...prev, { role: 'user', text: userMsg }]); setQueryText(''); setLoading(true);
+    const userMsg = queryText; 
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }]); 
+    setQueryText(''); 
+    setLoading(true);
+    
     try {
       const response = await callGemini(`目的地：${tripId}。用戶問：${userMsg}`);
       setMessages(prev => [...prev, { role: 'ai', text: response || "抱歉，我無法回答。" }]);
-    } catch (e) { setMessages(prev => [...prev, { role: 'ai', text: "連線失敗。" }]); } finally { setLoading(false); }
+    } catch (e) { 
+      setMessages(prev => [...prev, { role: 'ai', text: `連線失敗: ${e.message} (請確認您的 API Key 設定)` }]); 
+    } finally { 
+      setLoading(false); 
+    }
   };
+
+  // 使用 h-[calc(100vh-280px)] 確保在手機上有足夠空間，並使用 flex-col 撐開
   return (
-    <div className="flex flex-col h-[500px] bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-280px)] md:h-[600px] bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4 space-y-4 menu-scrollbar">
-        {messages.map((m, i) => (<div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] p-4 rounded-2xl text-sm font-medium ${m.role === 'user' ? 'bg-emerald-600 text-white' : 'bg-stone-100 text-stone-800'}`}>{m.text}</div></div>))}
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] p-4 rounded-2xl text-sm font-medium leading-relaxed ${m.role === 'user' ? 'bg-emerald-600 text-white' : 'bg-stone-100 text-stone-800'}`}>
+              {m.text}
+            </div>
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+        {loading && <div className="text-center text-xs text-stone-400 animate-pulse">正在輸入...</div>}
       </div>
-      <div className="p-4 border-t flex gap-2">
-        <input type="text" value={queryText} onChange={e => setQueryText(e.target.value)} placeholder="問點什麼..." className="flex-1 p-3 bg-stone-50 rounded-xl outline-none" onKeyDown={e => e.key === 'Enter' && handleSend()} />
-        <button onClick={handleSend} className="bg-emerald-600 text-white p-3 rounded-xl"><Send size={20} /></button>
+      <div className="p-4 border-t border-stone-100 bg-white flex gap-2 flex-shrink-0">
+        <input 
+          type="text" 
+          value={queryText} 
+          onChange={e => setQueryText(e.target.value)} 
+          placeholder="問點什麼..." 
+          className="flex-1 p-3 bg-stone-50 rounded-xl outline-none border border-stone-200 focus:border-emerald-500 transition-colors" 
+          onKeyDown={e => e.key === 'Enter' && handleSend()} 
+        />
+        <button onClick={handleSend} disabled={loading} className="bg-emerald-600 text-white p-3 rounded-xl disabled:opacity-50 active:scale-95 transition-transform">
+          <Send size={20} />
+        </button>
       </div>
     </div>
   );
@@ -801,7 +825,7 @@ function AddAccommodationModal({ tripId, onClose }) {
             <div><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">含有早餐</label><select className={inputClass} value={f.hasBreakfast} onChange={e=>setF({...f, hasBreakfast:e.target.value})}><option value="否">否</option><option value="是">是</option></select></div>
             <div><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">行李寄放</label><select className={inputClass} value={f.canStoreLuggage} onChange={e=>setF({...f, canStoreLuggage:e.target.value})}><option value="否">否</option><option value="是">是</option></select></div>
           </div>
-          <div className="flex gap-2 pt-4"><button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600">取消</button><button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg">確認新增</button></div>
+          <div className="flex gap-2 pt-4"><button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600 btn-active-effect">取消</button><button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg">確認新增</button></div>
         </form>
       </div>
     </div>

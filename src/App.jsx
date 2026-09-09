@@ -24,12 +24,12 @@ const getSafeFirebaseConfig = () => {
   }
 
   return {
-    apiKey: process.env.REACT_APP_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyDummyKeyForBuild",
-    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "trip-mate-dusky.firebaseapp.com",
-    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "trip-mate-dusky",
-    storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "trip-mate-dusky.appspot.com",
-    messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "000000000000",
-    appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:000000000000:web:000000"
+    apiKey: "AIzaSyBh0YDP353os0h_CwjJ04K4U9NTVDa2nn4",
+    authDomain: "tripmate-c8148.firebaseapp.com",
+    projectId: "tripmate-c8148",
+    storageBucket: "tripmate-c8148.firebasestorage.app",
+    messagingSenderId: "1051971323186",
+    appId: "1:1051971323186:web:c6596264c4de9fe9ad032b"
   };
 };
 

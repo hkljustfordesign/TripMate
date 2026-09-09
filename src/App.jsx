@@ -1,39 +1,25 @@
-/* global __firebase_config, __app_id, __initial_auth_token */
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, collection, onSnapshot, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { 
-  MapPin, Calendar, Clock, CreditCard, Users, Plus, Trash2, Plane, Train, Camera, Calculator, 
-  ArrowRightLeft, Share2, Navigation, Utensils, ShoppingBag, Ticket, AlertCircle, CheckCircle2, 
-  Palmtree, Wallet, Settings, ChevronRight, BedDouble, Bus, Store, Pill, Bell, Menu, X, 
-  Languages, PieChart, Luggage, ClipboardList, Heart, NotebookPen, Volume2, Coffee, 
-  Briefcase, 
-  Gamepad2, Smile, Home, MinusCircle, Car, Footprints, Anchor, Gift, Map, Armchair, Sparkles, Send,
-  UserPlus, UserMinus, Wifi, MonitorSmartphone
+  MapPin, Calendar, Clock, CreditCard, Users, Plus, Trash2, Plane, Train, 
+  ArrowRightLeft, Navigation, Utensils, CheckCircle2, 
+  Palmtree, Wallet, Settings, ChevronRight, BedDouble, Menu, X, 
+  Luggage, ClipboardList, Heart, Volume2, Coffee, 
+  Briefcase, Gamepad2, Smile, Home, Map, Armchair, Send,
+  UserMinus, Wifi, MonitorSmartphone
 } from 'lucide-react';
 
-// --- 安全讀取 Firebase 設定 (相容沙盒與標準環境變數) ---
-const getSafeFirebaseConfig = () => {
-  try {
-    if (typeof __firebase_config !== 'undefined' && __firebase_config && __firebase_config !== "") {
-      return JSON.parse(__firebase_config);
-    }
-  } catch (e) {
-    console.warn("解析沙盒配置失敗，嘗試讀取標準配置。");
-  }
-
-  return {
-    apiKey: "AIzaSyBh0YDP353os0h_CwjJ04K4U9NTVDa2nn4",
-    authDomain: "tripmate-c8148.firebaseapp.com",
-    projectId: "tripmate-c8148",
-    storageBucket: "tripmate-c8148.firebasestorage.app",
-    messagingSenderId: "1051971323186",
-    appId: "1:1051971323186:web:c6596264c4de9fe9ad032b"
-  };
+// --- 請在此填入您的真實 Firebase 設定 ---
+const firebaseConfig = {
+  apiKey: "AIzaSyBh0YDP353os0h_CwjJ04K4U9NTVDa2nn4",
+  authDomain: "tripmate-c8148.firebaseapp.com",
+  projectId: "tripmate-c8148",
+  storageBucket: "tripmate-c8148.firebasestorage.app",
+  messagingSenderId: "1051971323186",
+  appId: "1:1051971323186:web:c6596264c4de9fe9ad032b"
 };
-
-const firebaseConfig = getSafeFirebaseConfig();
 
 // 初始化 Firebase
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
@@ -53,11 +39,12 @@ const detectCurrency = (id) => {
 };
 
 // --- Gemini API Helper ---
+const waitTime = (ms) => new Promise(res => setTimeout(res, ms));
+
 const callGemini = async (prompt, systemInstruction = "") => {
   const apiKey = process.env.REACT_APP_GEMINI_API_KEY || ""; 
   
   if (!apiKey) {
-    console.warn("未偵測到 API Key，請在環境變數中設定 REACT_APP_GEMINI_API_KEY。");
     return "系統提示：目前尚未設定 API Key，請檢查環境變數設定以啟用 AI 助手功能。";
   }
 
@@ -77,7 +64,7 @@ const callGemini = async (prompt, systemInstruction = "") => {
       return data.candidates?.[0]?.content?.parts?.[0]?.text;
     } catch (error) {
       if (i === 2) throw error;
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await waitTime(delay);
       delay *= 2;
     }
   }
@@ -124,11 +111,7 @@ export default function App() {
 
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (err) {
         setUser({ uid: 'user-' + Math.random().toString(36).substring(7) });
       }
@@ -165,7 +148,7 @@ export default function App() {
   return <TripDashboard tripId={tripId} userId={user.uid} onLeave={handleLeave} />;
 }
 
-// --- 入口頁面 (強調跨裝置連動) ---
+// --- 入口頁面 ---
 function Onboarding({ onJoin, initialId }) {
   const [input, setInput] = useState(initialId);
   return (
@@ -217,7 +200,6 @@ function TripDashboard({ tripId, userId, onLeave }) {
   const [todoItems, setTodoItems] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
 
-  // 資料同步核心：使用正規且獨立的 trips/{tripId} 路徑實現跨裝置即時同步
   useEffect(() => {
     if (!tripId || !userId) return;
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, collection, onSnapshot, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -7,11 +7,11 @@ import {
   ArrowRightLeft, Navigation, Utensils, CheckCircle2, 
   Palmtree, Wallet, Settings, ChevronRight, BedDouble, Menu, X, 
   Luggage, ClipboardList, Heart, Volume2, Coffee, 
-  Briefcase, Gamepad2, Smile, Home, Map, Armchair, Send,
-  UserMinus, Wifi, MonitorSmartphone
+  Briefcase, Gamepad2, Smile, Home, Map, Armchair,
+  UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass
 } from 'lucide-react';
 
-// --- 請在此填入您的真實 Firebase 設定 ---
+// --- 請確認此處已填入您的真實 Firebase 設定 ---
 const firebaseConfig = {
   apiKey: "AIzaSyBh0YDP353os0h_CwjJ04K4U9NTVDa2nn4",
   authDomain: "tripmate-c8148.firebaseapp.com",
@@ -36,38 +36,6 @@ const detectCurrency = (id) => {
   if (/europe|france|paris|germany|berlin|italy|rome|英國|歐洲|法國|巴黎|德國|柏林|義大利|羅馬/.test(text)) return 'EUR';
   if (/thailand|bangkok|泰國|曼谷/.test(text)) return 'THB';
   return 'TWD'; 
-};
-
-// --- Gemini API Helper ---
-const waitTime = (ms) => new Promise(res => setTimeout(res, ms));
-
-const callGemini = async (prompt, systemInstruction = "") => {
-  const apiKey = process.env.REACT_APP_GEMINI_API_KEY || ""; 
-  
-  if (!apiKey) {
-    return "系統提示：目前尚未設定 API Key，請檢查環境變數設定以啟用 AI 助手功能。";
-  }
-
-  let delay = 1000;
-  for (let i = 0; i < 3; i++) {
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          systemInstruction: { parts: [{ text: systemInstruction || "你是一個專業的旅遊助手，請使用繁體中文回答。" }] }
-        })
-      });
-      if (!response.ok) throw new Error(`API 請求失敗: ${response.status}`);
-      const data = await response.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text;
-    } catch (error) {
-      if (i === 2) throw error;
-      await waitTime(delay);
-      delay *= 2;
-    }
-  }
 };
 
 const fontStyle = `
@@ -204,7 +172,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
     if (!tripId || !userId) return;
 
     const unsubItems = onSnapshot(collection(db, 'trips', tripId, 'items'), (snap) => {
-      setItems(snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=>(a.datetime || a.checkInTime || '9999').localeCompare(b.datetime || b.checkInTime || '9999')));
+      setItems(snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=>(a.datetime || a.checkInDate || '9999').localeCompare(b.datetime || b.checkInDate || '9999')));
     }, err => console.error("同步行程失敗:", err));
 
     const unsubExp = onSnapshot(collection(db, 'trips', tripId, 'expenses'), (snap) => {
@@ -245,7 +213,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
           {activeTab === 'packing' && <PackingListView tripId={tripId} items={packingItems} />}
           {activeTab === 'todo' && <TodoListView tripId={tripId} items={todoItems} />}
           {activeTab === 'wishlist' && <WishListView tripId={tripId} items={wishlistItems} />}
-          {activeTab === 'tools' && <ToolsView tripId={tripId} />}
+          {activeTab === 'tools' && <ToolsView />}
         </div>
       </main>
       <MobileFabMenu activeTab={activeTab} onNavClick={(id)=>{setActiveTab(id);setIsMenuOpen(false)}} onLeave={onLeave} isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />
@@ -263,7 +231,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
     { id: 'packing', label: '行李清單', icon: <Luggage size={20} /> },
     { id: 'todo', label: '代辦事項', icon: <ClipboardList size={20} /> },
     { id: 'wishlist', label: '願望清單', icon: <Heart size={20} /> },
-    { id: 'tools', label: '旅遊工具', icon: <Settings size={20} /> },
+    { id: 'tools', label: '日語會話', icon: <Settings size={20} /> },
   ];
   return (
     <>
@@ -290,7 +258,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
 
 // --- 視圖組件: 首頁 ---
 function HomeView({ items, wishlistItems }) {
-  const timelineItems = items.sort((a, b) => (a.datetime || a.checkInTime || '9999').localeCompare(b.datetime || b.checkInTime || '9999'));
+  const timelineItems = items.sort((a, b) => (a.datetime || a.checkInDate || '9999').localeCompare(b.datetime || b.checkInDate || '9999'));
   const wishlistCategories = [
     { id: '吃', icon: <Utensils size={18}/>, color: 'text-orange-600', bgColor: 'bg-orange-50' },
     { id: '喝', icon: <Coffee size={18}/>, color: 'text-blue-600', bgColor: 'bg-blue-50' },
@@ -318,7 +286,7 @@ function HomeView({ items, wishlistItems }) {
                   <div className="p-5 rounded-2xl shadow-sm border border-stone-100 bg-white">
                     <div className="flex items-center gap-2 mb-1"><Icon size={14} className="text-emerald-600"/><span className="text-xs font-bold uppercase text-emerald-600">{item.type}</span></div>
                     <h3 className="text-xl font-bold text-stone-800">{item.title}</h3>
-                    <div className="text-sm font-medium text-emerald-700 mt-1 flex items-center gap-1"><Clock size={14}/> {item.datetime || '未定時間'}</div>
+                    <div className="text-sm font-medium text-emerald-700 mt-1 flex items-center gap-1"><Clock size={14}/> {item.datetime || (item.checkInDate ? `${item.checkInDate} ${item.checkInTime || ''}` : '未定時間')}</div>
                     {item.location && <div className="text-sm text-stone-600 mt-2 flex items-center gap-1"><MapPin size={14}/> {item.location} <a href={getGoogleMapsLink(item.location)} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 font-bold hover:underline">地圖</a></div>}
                   </div>
                 </div>
@@ -523,7 +491,7 @@ function TransportView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 住宿登錄 ---
+// --- 視圖組件: 住宿登錄 (已支援入住/退房日期與時間) ---
 function AccommodationView({ tripId, items }) {
   const [showAdd, setShowAdd] = useState(false);
   const aItems = items.filter(i=>i.type==='accommodation');
@@ -538,9 +506,13 @@ function AccommodationView({ tripId, items }) {
           <div className="flex-1">
             <div className="font-bold text-xl text-stone-800 mb-1">{i.title}</div>
             <div className="text-sm text-stone-500 mb-3 flex items-center gap-1"><MapPin size={14}/> {i.location} <a href={getGoogleMapsLink(i.location)} target="_blank" rel="noreferrer" className="ml-2 text-blue-500 font-bold hover:underline text-xs">地圖</a></div>
-            <div className="grid grid-cols-2 gap-3 bg-stone-50 p-4 rounded-2xl border border-stone-50 shadow-inner">
-              <div className="text-xs text-stone-600"><strong>入住時間:</strong> {i.checkInTime || '--:--'}</div>
-              <div className="text-xs text-stone-600"><strong>退房時間:</strong> {i.checkOutTime || '--:--'}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-stone-50 p-4 rounded-2xl border border-stone-50 shadow-inner">
+              <div className="text-xs text-stone-600">
+                <strong>入住:</strong> {i.checkInDate || '未定日期'} <span className="text-stone-400 font-mono ml-1">({i.checkInTime || '--:--'})</span>
+              </div>
+              <div className="text-xs text-stone-600">
+                <strong>退房:</strong> {i.checkOutDate || '未定日期'} <span className="text-stone-400 font-mono ml-1">({i.checkOutTime || '--:--'})</span>
+              </div>
               <div className="text-xs flex items-center gap-1"><strong>早餐服務:</strong> {i.hasBreakfast === '是' ? <span className="text-emerald-600 flex items-center font-bold"><Coffee size={12} className="mr-0.5"/>含早餐</span> : <span className="text-stone-400">無</span>}</div>
               <div className="text-xs flex items-center gap-1"><strong>行李寄放:</strong> {i.canStoreLuggage === '是' ? <span className="text-emerald-600 flex items-center font-bold"><Briefcase size={12} className="mr-0.5"/>可寄放</span> : <span className="text-stone-400">不可</span>}</div>
             </div>
@@ -553,121 +525,182 @@ function AccommodationView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 旅遊工具箱 ---
-function ToolsView({ tripId }) {
-  const [tab, setTab] = useState('phrases');
+// --- 視圖組件: 旅遊工具箱 (實用日語會話手冊) ---
+function ToolsView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">
-      <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3 flex-shrink-0"><Settings size={32}/> 旅遊工具</h2>
-      <div className="flex gap-4 border-b border-stone-200 mb-4 flex-shrink-0">
-        {['phrases', 'gojuon', 'ai'].map(t => (<button key={t} onClick={()=>setTab(t)} className={`pb-2 font-bold transition-colors ${tab===t ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-stone-400'}`}>{t==='phrases' ? '日語會話' : t==='gojuon' ? '五十音' : '✨ AI 助手'}</button>))}
+      <div className="flex items-center justify-between border-b border-stone-200 pb-4">
+        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3">
+          <Settings className="text-emerald-600" size={32}/> 日本旅遊實用會話
+        </h2>
+        <span className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full font-bold flex items-center gap-1">
+          <Volume2 size={14}/> 點擊即可發音
+        </span>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
-        {tab==='phrases' && <JapanesePhrases />}
-        {tab==='gojuon' && <GojuonChart />}
-        {tab==='ai' && <AIAssistantView tripId={tripId} />}
+        <JapanesePhrases />
       </div>
     </div>
   );
 }
 
-// --- 子組件: AI 助手 ---
-function AIAssistantView({ tripId }) {
-  const [queryText, setQueryText] = useState('');
-  const [messages, setMessages] = useState([{ role: 'ai', text: `你好！我是你的 ✨ AI 旅遊助手。你可以問我關於 ${tripId} 的文化、天氣或幫你翻譯。` }]);
-  const [loading, setLoading] = useState(false);
-  const messagesEndRef = useRef(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const handleSend = async () => {
-    if (!queryText.trim() || loading) return;
-    const userMsg = queryText; 
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]); 
-    setQueryText(''); 
-    setLoading(true);
-    
-    try {
-      const response = await callGemini(`目的地：${tripId}。用戶問：${userMsg}`);
-      setMessages(prev => [...prev, { role: 'ai', text: response || "抱歉，我無法回答。" }]);
-    } catch (e) { 
-      setMessages(prev => [...prev, { role: 'ai', text: `連線失敗: ${e.message} (請確認您的 API Key 設定)` }]); 
-    } finally { 
-      setLoading(false); 
+// --- 子組件: 日語實用會話 (精選 5 大旅遊類別，每類上限 15 句) ---
+function JapanesePhrases() {
+  const categories = { 
+    "常用招呼": {
+      icon: <Smile size={18} className="text-emerald-600"/>,
+      phrases: [
+        "こんにちは (你好)",
+        "ありがとうございます (謝謝你)",
+        "すみません (不好意思 / 借過)",
+        "ごめんなさい (對不起)",
+        "お願いします (麻煩您了 / 請)",
+        "はい / いいえ (好的 / 不是)",
+        "英語が話せますか (你會說英文嗎？)",
+        "日本語がわかりません (我不太懂日語)",
+        "これをお願いします (請給我這個)",
+        "大丈夫です (沒關係 / 不用了)",
+        "さようなら (再見)"
+      ]
+    },
+    "訂位/餐廳/菜單內容": {
+      icon: <Utensils size={18} className="text-orange-600"/>,
+      phrases: [
+        "予約した◯◯です (我是有預約的◯◯)",
+        "予約していません、◯名です (沒有預約，我們有◯位)",
+        "メニューをいただけますか (請給我菜單)",
+        "おすすめは何ですか (推薦的餐點是什麼？)",
+        "注文をお願いします (麻煩請幫我點餐)",
+        "これと同じものをください (請給我一份和這個一樣的)",
+        "お水をもらえますか (可以給我杯水嗎？)",
+        "牛肉は入っていますか (這裡面有牛肉嗎？)",
+        "パクチーを抜いてください (請幫我不要加香菜)",
+        "辛くしないでください (請不要做得太辣)",
+        "ラストオーダーは何時ですか (最後加點是幾點？)",
+        "持ち帰りはできますか (可以外帶嗎？)",
+        "お会計をお願いします (麻煩結帳)",
+        "別々に会計できますか (可以分開結帳嗎？)",
+        "ごちそうさまでした (謝謝招待 / 吃飽了)"
+      ]
+    },
+    "租車/加油站/問路需求": {
+      icon: <Fuel size={18} className="text-blue-600"/>,
+      phrases: [
+        "レンタカーの予約をしています (我有預約租車)",
+        "国際免許証はこちらです (這是我的國際駕照)",
+        "ETCカードをレンタルしたいです (我想租借ETC卡)",
+        "カーナビを英語か中国語にできますか (導航能換成中文或英文嗎？)",
+        "レギュラー満タンでお願いします (請加滿 Regular 一般汽油)",
+        "軽油を満タンでお願いします (請加滿柴油)",
+        "タイヤの空気圧を点検してください (請幫我檢查胎壓)",
+        "窓を拭いてもらえますか (可以幫忙擦一下車窗嗎？)",
+        "ゴミを捨ててもらえますか (可以幫我倒一下垃圾嗎？)",
+        "◯◯はどこですか (請問◯◯在哪裡？)",
+        "ここはどこですか (請問這裡現在是哪裡？)",
+        "駅へはどう行けばいいですか (請問到車站該怎麼走？)",
+        "近くにトイレはありますか (這附近有洗手間嗎？)",
+        "近くに駐車場はありますか (這附近有停車場嗎？)",
+        "写真を撮っていただけますか (可以幫我們拍張照片嗎？)"
+      ]
+    },
+    "購物/試穿/試吃/試聞/結帳需求": {
+      icon: <ShoppingBag size={18} className="text-pink-600"/>,
+      phrases: [
+        "いくらですか (請問這個多少錢？)",
+        "試着してもいいですか (請問可以試穿嗎？)",
+        "これの他のサイズはありますか (這款有其他尺寸嗎？)",
+        "他の色はありますか (這款有其他顏色嗎？)",
+        "試食してもいいですか (請問可以試吃嗎？)",
+        "香りを試してもいいですか (請問可以試聞香味嗎？)",
+        "新しい在庫はありますか (請問有新的庫存嗎？)",
+        "これを見せてください (請讓我看一下這個)",
+        "少し考えます (我再考慮看看，謝謝)",
+        "これをください (我要買這個)",
+        "プレゼント用です (這是要送禮用的包裝)",
+        "袋はいりません (我不需要塑膠袋)",
+        "クレジットカードは使えますか (可以刷信用卡嗎？)",
+        "電子マネーで払えますか (可以使用電子支付/交通卡嗎？)",
+        "領収書をお願いします (請開收據發票)"
+      ]
+    },
+    "機場出入境/退稅相關": {
+      icon: <Compass size={18} className="text-teal-600"/>,
+      phrases: [
+        "免税手続きをお願いします (麻煩請幫我辦理免稅手續)",
+        "免税カウンターはどこですか (請問免稅櫃台在哪裡？)",
+        "パスポートを持っています (我有隨身攜帶護照)",
+        "観光で来ました (我是來觀光旅遊的)",
+        "◯日間滞在します (我預計停留◯天)",
+        "◯◯ホテルに泊まります (我會住在◯◯飯店)",
+        "搭乗口は何番ですか (請問登機門是幾號？)",
+        "受託手荷物は何キロまでですか (請問托運行李限重幾公斤？)",
+        "荷物を預けたいです (我想要辦理行李托運)",
+        "壊れ物が入っています (行李箱裡面有易碎品)",
+        "手荷物受取所はどこですか (行李領取處在哪裡？)",
+        "荷物が出てきません (我的行李一直沒有出來)",
+        "リムジンバス乗り場はどこですか (請問利木津巴士搭車處在哪？)",
+        "税関申告書はこちらです (這是我的海關申報單)",
+        "日本円に両替できますか (這裡可以兌換日幣現金嗎？)"
+      ]
     }
   };
 
+  const [activeCategory, setActiveCategory] = useState("常用招呼");
+
   return (
-    <div className="flex flex-col h-[calc(100vh-280px)] md:h-[600px] bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 menu-scrollbar">
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] p-4 rounded-2xl text-sm font-medium leading-relaxed ${m.role === 'user' ? 'bg-emerald-600 text-white' : 'bg-stone-100 text-stone-800'}`}>
-              {m.text}
-            </div>
-          </div>
+    <div className="space-y-6 pb-8">
+      {/* 橫向分類選單 */}
+      <div className="flex gap-2 overflow-x-auto pb-2 menu-scrollbar">
+        {Object.entries(categories).map(([catName, catData]) => (
+          <button
+            key={catName}
+            onClick={() => setActiveCategory(catName)}
+            className={`px-4 py-2.5 rounded-2xl font-bold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 shadow-sm ${
+              activeCategory === catName 
+                ? 'bg-emerald-600 text-white shadow-emerald-200' 
+                : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-100'
+            }`}
+          >
+            {catData.icon}
+            <span>{catName}</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ml-1 ${activeCategory === catName ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-400'}`}>
+              {catData.phrases.length}
+            </span>
+          </button>
         ))}
-        <div ref={messagesEndRef} />
-        {loading && <div className="text-center text-xs text-stone-400 animate-pulse">正在輸入...</div>}
       </div>
-      <div className="p-4 border-t border-stone-100 bg-white flex gap-2 flex-shrink-0">
-        <input 
-          type="text" 
-          value={queryText} 
-          onChange={e => setQueryText(e.target.value)} 
-          placeholder="問點什麼..." 
-          className="flex-1 p-3 bg-stone-50 rounded-xl outline-none border border-stone-200 focus:border-emerald-500 transition-colors" 
-          onKeyDown={e => e.key === 'Enter' && handleSend()} 
-        />
-        <button onClick={handleSend} disabled={loading} className="bg-emerald-600 text-white p-3 rounded-xl disabled:opacity-50 active:scale-95 transition-transform">
-          <Send size={20} />
-        </button>
-      </div>
-    </div>
-  );
-}
 
-// --- 子組件: 日語會話 ---
-function JapanesePhrases() {
-  const categories = { 
-    "常用招呼": ["こんにちは (你好)", "ありがとうございます (謝謝)", "すみません (不好意思)"],
-    "餐廳用語": ["メニューをください (請給我菜單)", "お會計をお願いします (請結帳)", "美味しいです (好吃)"]
-  };
-  return (
-    <div className="grid gap-6">
-      {Object.entries(categories).map(([cat, phrases], i) => (
-        <div key={i} className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100">
-          <h3 className="font-bold text-lg text-emerald-800 mb-4">{cat}</h3>
-          <div className="space-y-3">
-            {phrases.map((p, idx) => {
-              const [jp, cn] = p.split(' (');
-              return (
-                <div key={idx} className="flex justify-between items-center bg-stone-50 p-3 rounded-xl">
-                  <div><div className="font-bold text-stone-800">{jp}</div><div className="text-xs text-stone-500">{cn.replace(')', '')}</div></div>
-                  <button onClick={() => playGoogleAudio(jp)} className="p-3 text-emerald-600 hover:scale-110 transition-transform"><Volume2 size={20} /></button>
+      {/* 單一類別詳細對話清單 */}
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 space-y-3">
+        <h3 className="font-bold text-lg text-emerald-900 mb-4 flex items-center gap-2">
+          {categories[activeCategory]?.icon}
+          {activeCategory}
+        </h3>
+        <div className="space-y-2.5">
+          {categories[activeCategory]?.phrases.map((p, idx) => {
+            const [jp, cn] = p.split(' (');
+            return (
+              <div 
+                key={idx} 
+                onClick={() => playGoogleAudio(jp)}
+                className="flex justify-between items-center bg-stone-50 hover:bg-emerald-50/60 p-3.5 rounded-2xl border border-stone-100 transition-colors cursor-pointer group"
+              >
+                <div>
+                  <div className="font-bold text-stone-800 text-base group-hover:text-emerald-900 transition-colors">{jp}</div>
+                  <div className="text-xs text-stone-500 group-hover:text-emerald-700 mt-0.5">{cn ? cn.replace(')', '') : ''}</div>
                 </div>
-              );
-            })}
-          </div>
+                <button 
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); playGoogleAudio(jp); }}
+                  className="p-2.5 text-emerald-600 hover:bg-emerald-100/70 rounded-xl transition-all active:scale-90"
+                  title="播放語音"
+                >
+                  <Volume2 size={20} />
+                </button>
+              </div>
+            );
+          })}
         </div>
-      ))}
-    </div>
-  );
-}
-
-// --- 子組件: 五十音圖 ---
-function GojuonChart() {
-  const hira = [['あ','い','う','え','お'], ['か','き','く','け','こ']];
-  return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100">
-      <div className="grid grid-cols-5 gap-3">
-        {hira.flat().map((c, i) => <div key={i} className="p-3 bg-emerald-50 rounded-lg text-center font-bold text-emerald-900">{c}</div>)}
       </div>
     </div>
   );
@@ -802,27 +835,86 @@ function AddExpenseModal({ tripId, onClose }) {
   );
 }
 
-// --- 彈窗組件: 新增住宿 ---
+// --- 彈窗組件: 新增住宿 (新增入住日期、退房日期填寫欄位) ---
 function AddAccommodationModal({ tripId, onClose }) { 
-  const [f, setF] = useState({ title: '', type: 'accommodation', location: '', checkInTime: '15:00', checkOutTime: '11:00', hasBreakfast: '否', canStoreLuggage: '否' }); 
-  const sub = async (e) => { e.preventDefault(); await addDoc(collection(db, 'trips', tripId, 'items'), { ...f, createdAt: serverTimestamp() }); onClose(); }; 
+  const [f, setF] = useState({ 
+    title: '', 
+    type: 'accommodation', 
+    location: '', 
+    checkInDate: '',
+    checkInTime: '15:00', 
+    checkOutDate: '',
+    checkOutTime: '11:00', 
+    hasBreakfast: '否', 
+    canStoreLuggage: '否' 
+  }); 
+
+  const sub = async (e) => { 
+    e.preventDefault(); 
+    await addDoc(collection(db, 'trips', tripId, 'items'), { ...f, createdAt: serverTimestamp() }); 
+    onClose(); 
+  }; 
+
   const inputClass = "w-full p-3 bg-stone-50 border border-stone-100 rounded-xl outline-none focus:border-emerald-500 transition-colors";
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
-        <h3 className="font-bold text-xl mb-6 text-emerald-900 flex items-center gap-2"><BedDouble size={24}/> 新增住宿登錄</h3>
-        <form onSubmit={sub} className="space-y-4">
-          <div><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">住宿名稱</label><input className={inputClass} placeholder="例如: 濟州島海景飯店" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required /></div>
-          <div><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">地址 (與地圖連動)</label><input className={inputClass} placeholder="輸入地址或地點" value={f.location} onChange={e=>setF({...f, location:e.target.value})} required /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">入住時間</label><input type="time" className={inputClass} value={f.checkInTime} onChange={e=>setF({...f, checkInTime:e.target.value})} /></div>
-            <div><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">退房時間</label><input type="time" className={inputClass} value={f.checkOutTime} onChange={e=>setF({...f, checkOutTime:e.target.value})} /></div>
+      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[92vh] flex flex-col">
+        <h3 className="font-bold text-xl mb-4 text-emerald-900 flex items-center gap-2"><BedDouble size={24}/> 新增住宿登錄</h3>
+        <form onSubmit={sub} className="space-y-4 overflow-y-auto menu-scrollbar pr-1">
+          <div>
+            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">住宿名稱</label>
+            <input className={inputClass} placeholder="例如: 濟州島海景飯店" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">含有早餐</label><select className={inputClass} value={f.hasBreakfast} onChange={e=>setF({...f, hasBreakfast:e.target.value})}><option value="否">否</option><option value="是">是</option></select></div>
-            <div><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">行李寄放</label><select className={inputClass} value={f.canStoreLuggage} onChange={e=>setF({...f, canStoreLuggage:e.target.value})}><option value="否">否</option><option value="是">是</option></select></div>
+          <div>
+            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">地址 (與地圖連動)</label>
+            <input className={inputClass} placeholder="輸入地址或地點" value={f.location} onChange={e=>setF({...f, location:e.target.value})} required />
           </div>
-          <div className="flex gap-2 pt-4"><button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600 btn-active-effect">取消</button><button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg">確認新增</button></div>
+
+          {/* 入住日期與時間 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">入住日期</label>
+              <input type="date" className={inputClass} value={f.checkInDate} onChange={e=>setF({...f, checkInDate:e.target.value})} required />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">入住時間</label>
+              <input type="time" className={inputClass} value={f.checkInTime} onChange={e=>setF({...f, checkInTime:e.target.value})} />
+            </div>
+          </div>
+
+          {/* 退房日期與時間 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">退房日期</label>
+              <input type="date" className={inputClass} value={f.checkOutDate} onChange={e=>setF({...f, checkOutDate:e.target.value})} required />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">退房時間</label>
+              <input type="time" className={inputClass} value={f.checkOutTime} onChange={e=>setF({...f, checkOutTime:e.target.value})} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">含有早餐</label>
+              <select className={inputClass} value={f.hasBreakfast} onChange={e=>setF({...f, hasBreakfast:e.target.value})}>
+                <option value="否">否</option>
+                <option value="是">是</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">行李寄放</label>
+              <select className={inputClass} value={f.canStoreLuggage} onChange={e=>setF({...f, canStoreLuggage:e.target.value})}>
+                <option value="否">否</option>
+                <option value="是">是</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-3">
+            <button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600 btn-active-effect">取消</button>
+            <button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg">確認新增</button>
+          </div>
         </form>
       </div>
     </div>

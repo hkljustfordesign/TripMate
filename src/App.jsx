@@ -8,7 +8,7 @@ import {
   Palmtree, Wallet, Settings, ChevronRight, BedDouble, Menu, X, 
   Luggage, ClipboardList, Heart, Volume2, Coffee, 
   Briefcase, Gamepad2, Smile, Home, Map, Armchair,
-  UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil
+  UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil, Tag
 } from 'lucide-react';
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
@@ -256,14 +256,15 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 ---
+// --- 視圖組件: 首頁 (願望清單指南加入「想購的」與備註展示) ---
 function HomeView({ items, wishlistItems }) {
   const timelineItems = items.sort((a, b) => (a.datetime || a.checkInDate || '9999').localeCompare(b.datetime || b.checkInDate || '9999'));
   const wishlistCategories = [
     { id: '吃', icon: <Utensils size={18}/>, color: 'text-orange-600', bgColor: 'bg-orange-50' },
     { id: '喝', icon: <Coffee size={18}/>, color: 'text-blue-600', bgColor: 'bg-blue-50' },
     { id: '玩', icon: <Gamepad2 size={18}/>, color: 'text-green-600', bgColor: 'bg-green-50' },
-    { id: '樂', icon: <Smile size={18}/>, color: 'text-purple-600', bgColor: 'bg-purple-50' }
+    { id: '樂', icon: <Smile size={18}/>, color: 'text-purple-600', bgColor: 'bg-purple-50' },
+    { id: '購', icon: <ShoppingBag size={18}/>, color: 'text-rose-600', bgColor: 'bg-rose-50' }
   ];
 
   return (
@@ -300,7 +301,7 @@ function HomeView({ items, wishlistItems }) {
         <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3 mb-8">
           <Heart className="text-pink-500" size={32}/> 願望地圖指南
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
           {wishlistCategories.map(cat => {
             const catItems = wishlistItems.filter(item => item.category === cat.id);
             return (
@@ -320,7 +321,12 @@ function HomeView({ items, wishlistItems }) {
                         <div className="absolute inset-0 bg-transparent cursor-pointer" onClick={() => window.open(getNavigationLink(item.name), '_blank')}></div>
                       </div>
                       <div className="p-4">
-                        <h4 className="font-bold text-stone-800 text-sm truncate mb-3">{item.name}</h4>
+                        <h4 className="font-bold text-stone-800 text-sm truncate mb-1">{item.name}</h4>
+                        {item.note && (
+                          <p className="text-xs text-stone-500 bg-stone-50 p-2 rounded-xl mb-3 line-clamp-2 border border-stone-100/80">
+                            💡 {item.note}
+                          </p>
+                        )}
                         <button onClick={() => window.open(getNavigationLink(item.name), '_blank')} className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-bold hover:bg-emerald-600 hover:text-white transition group-hover:scale-[1.02] active:scale-95">
                           <Navigation size={14} className="animate-pulse" /> 即時導覽
                         </button>
@@ -395,40 +401,99 @@ function TodoListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 願望清單 ---
+// --- 視圖組件: 願望清單 (含「吃喝玩樂購」五類與備註欄位) ---
 function WishListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
+  const [note, setNote] = useState('');
   const [cat, setCat] = useState('吃');
-  const categories = [{ id: '吃', icon: <Utensils size={16}/> }, { id: '喝', icon: <Coffee size={16}/> }, { id: '玩', icon: <Gamepad2 size={16}/> }, { id: '樂', icon: <Smile size={16}/> }];
+  
+  const categories = [
+    { id: '吃', icon: <Utensils size={16}/> },
+    { id: '喝', icon: <Coffee size={16}/> },
+    { id: '玩', icon: <Gamepad2 size={16}/> },
+    { id: '樂', icon: <Smile size={16}/> },
+    { id: '購', icon: <ShoppingBag size={16}/> }
+  ];
+
   const handleAdd = async (e) => {
-    e.preventDefault(); if (!newItem.trim()) return;
-    await addDoc(collection(db, 'trips', tripId, 'wishlist'), { name: newItem.trim(), category: cat, createdAt: serverTimestamp() });
+    e.preventDefault(); 
+    if (!newItem.trim()) return;
+    await addDoc(collection(db, 'trips', tripId, 'wishlist'), { 
+      name: newItem.trim(), 
+      note: note.trim(), 
+      category: cat, 
+      createdAt: serverTimestamp() 
+    });
     setNewItem('');
+    setNote('');
   };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Heart className="text-emerald-600" size={32}/> 願望清單</h2>
-      <div className="bg-white p-4 rounded-2xl border border-stone-100 shadow-sm">
-        <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
-          {categories.map(c => <button key={c.id} onClick={()=>setCat(c.id)} className={`px-4 py-2 rounded-full font-bold text-sm transition-all flex items-center gap-1 ${cat===c.id ? 'bg-emerald-600 text-white shadow-md' : 'bg-stone-50 text-stone-500'}`}>{c.icon}{c.id}</button>)}
+      <div className="bg-white p-5 rounded-2xl border border-stone-100 shadow-sm space-y-3">
+        <div className="flex gap-2 overflow-x-auto pb-1 menu-scrollbar">
+          {categories.map(c => (
+            <button 
+              key={c.id} 
+              type="button" 
+              onClick={()=>setCat(c.id)} 
+              className={`px-4 py-2 rounded-full font-bold text-sm transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                cat===c.id ? 'bg-emerald-600 text-white shadow-md' : 'bg-stone-50 text-stone-500 hover:bg-stone-100'
+              }`}
+            >
+              {c.icon} 想{c.id}
+            </button>
+          ))}
         </div>
-        <form onSubmit={handleAdd} className="flex gap-2">
-          <input type="text" value={newItem} onChange={e=>setNewItem(e.target.value)} placeholder={`想${cat}的地點名稱...`} className="flex-1 p-3 bg-stone-50 rounded-xl outline-none" />
-          <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl"><Plus size={24}/></button>
+        
+        {/* 新增願望與備註表單 */}
+        <form onSubmit={handleAdd} className="space-y-2.5">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input 
+              type="text" 
+              value={newItem} 
+              onChange={e=>setNewItem(e.target.value)} 
+              placeholder={`想${cat}的地點/店家名稱...`} 
+              className="flex-1 p-3 bg-stone-50 rounded-xl outline-none border border-stone-200 focus:border-emerald-500" 
+              required
+            />
+            <input 
+              type="text" 
+              value={note} 
+              onChange={e=>setNote(e.target.value)} 
+              placeholder={`備註內容 (例: 必吃招牌菜、必買藥妝品)`} 
+              className="flex-1 p-3 bg-stone-50 rounded-xl outline-none border border-stone-200 focus:border-emerald-500" 
+            />
+            <button type="submit" className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-1 shadow-md hover:bg-emerald-700 transition">
+              <Plus size={20}/> 新增
+            </button>
+          </div>
         </form>
       </div>
+
       <div className="space-y-3">
         {items.map(item => (
-          <div key={item.id} className="bg-white p-4 rounded-xl border border-stone-100 shadow-sm flex items-center justify-between">
-            <div className="flex-1">
-              <span className="font-bold text-stone-800">{item.name} </span>
-              <span className="text-xs bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg font-bold ml-2">{item.category}</span>
+          <div key={item.id} className="bg-white p-4 rounded-xl border border-stone-100 shadow-sm flex items-center justify-between hover:shadow-md transition">
+            <div className="flex-1 pr-3">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-stone-800 text-base">{item.name}</span>
+                <span className="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg font-bold">{item.category}</span>
+              </div>
+              {item.note && (
+                <div className="text-xs text-stone-500 mt-1 flex items-center gap-1">
+                  <Tag size={12} className="text-stone-400" />
+                  <span>{item.note}</span>
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <a href={getGoogleMapsLink(item.name)} target="_blank" rel="noreferrer" className="p-3 text-emerald-500 hover:bg-emerald-50 rounded-xl transition">
+            <div className="flex items-center gap-1">
+              <a href={getGoogleMapsLink(item.name)} target="_blank" rel="noreferrer" className="p-2.5 text-emerald-500 hover:bg-emerald-50 rounded-xl transition" title="前往 Google 地圖">
                 <Map size={20} />
               </a>
-              <button onClick={()=>deleteDoc(doc(db, 'trips', tripId, 'wishlist', item.id))} className="text-stone-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
+              <button onClick={()=>deleteDoc(doc(db, 'trips', tripId, 'wishlist', item.id))} className="text-stone-300 hover:text-red-500 p-2.5 transition-colors" title="刪除">
+                <Trash2 size={18}/>
+              </button>
             </div>
           </div>
         ))}
@@ -606,10 +671,11 @@ function ToolsView() {
   );
 }
 
-// --- 子組件: 日語實用會話 ---
+// --- 子組件: 日語實用會話 (手機端優化雙列清晰簡潔索引) ---
 function JapanesePhrases() {
   const categories = { 
-    "常用招呼": {
+    "招呼 👋": {
+      fullName: "常用招呼",
       icon: <Smile size={18} className="text-emerald-600"/>,
       phrases: [
         "こんにちは (你好)",
@@ -625,7 +691,8 @@ function JapanesePhrases() {
         "さようなら (再見)"
       ]
     },
-    "訂位/餐廳/菜單內容": {
+    "餐飲 🍽️": {
+      fullName: "訂位 / 餐廳 / 菜單",
       icon: <Utensils size={18} className="text-orange-600"/>,
       phrases: [
         "予約した◯◯です (我是有預約的◯◯)",
@@ -645,7 +712,8 @@ function JapanesePhrases() {
         "ごちそうさまでした (謝謝招待 / 吃飽了)"
       ]
     },
-    "租車/加油站/問路需求": {
+    "交通 🚗": {
+      fullName: "租車 / 加油 / 問路",
       icon: <Fuel size={18} className="text-blue-600"/>,
       phrases: [
         "レンタカーの予約をしています (我有預約租車)",
@@ -665,7 +733,8 @@ function JapanesePhrases() {
         "写真を撮っていただけますか (可以幫我們拍張照片嗎？)"
       ]
     },
-    "購物/試穿/試吃/試聞/結帳需求": {
+    "購物 🛍️": {
+      fullName: "試穿 / 試吃 / 結帳",
       icon: <ShoppingBag size={18} className="text-pink-600"/>,
       phrases: [
         "いくらですか (請問這個多少錢？)",
@@ -685,7 +754,8 @@ function JapanesePhrases() {
         "領収書をお願いします (請開收據發票)"
       ]
     },
-    "機場出入境/退稅相關": {
+    "機場 ✈️": {
+      fullName: "出入境 / 退稅相關",
       icon: <Compass size={18} className="text-teal-600"/>,
       phrases: [
         "免税手続きをお願いします (麻煩請幫我辦理免稅手續)",
@@ -707,35 +777,41 @@ function JapanesePhrases() {
     }
   };
 
-  const [activeCategory, setActiveCategory] = useState("常用招呼");
+  const [activeCategory, setActiveCategory] = useState("招呼 👋");
 
   return (
     <div className="space-y-6 pb-8">
-      <div className="flex gap-2 overflow-x-auto pb-2 menu-scrollbar">
-        {Object.entries(categories).map(([catName, catData]) => (
+      {/* 簡化直覺的雙列/三列格狀索引標籤，徹底解決手機破版擁擠問題 */}
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        {Object.entries(categories).map(([shortKey, catData]) => (
           <button
-            key={catName}
-            onClick={() => setActiveCategory(catName)}
-            className={`px-4 py-2.5 rounded-2xl font-bold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 shadow-sm ${
-              activeCategory === catName 
-                ? 'bg-emerald-600 text-white shadow-emerald-200' 
-                : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-100'
+            key={shortKey}
+            type="button"
+            onClick={() => setActiveCategory(shortKey)}
+            className={`py-3 px-2 rounded-2xl font-bold text-xs transition-all flex flex-col items-center justify-center gap-1 border ${
+              activeCategory === shortKey 
+                ? 'bg-emerald-600 text-white shadow-md border-emerald-600 scale-[1.02]' 
+                : 'bg-white text-stone-700 hover:bg-stone-50 border-stone-200'
             }`}
           >
-            {catData.icon}
-            <span>{catName}</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ml-1 ${activeCategory === catName ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-400'}`}>
-              {catData.phrases.length}
-            </span>
+            <span className="text-base">{shortKey.split(' ')[1]}</span>
+            <span className="truncate">{shortKey.split(' ')[0]}</span>
           </button>
         ))}
       </div>
 
+      {/* 單一類別詳細對話清單 */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 space-y-3">
-        <h3 className="font-bold text-lg text-emerald-900 mb-4 flex items-center gap-2">
-          {categories[activeCategory]?.icon}
-          {activeCategory}
-        </h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-bold text-lg text-emerald-900 flex items-center gap-2">
+            {categories[activeCategory]?.icon}
+            {categories[activeCategory]?.fullName}
+          </h3>
+          <span className="text-xs bg-stone-100 text-stone-500 font-bold px-2.5 py-1 rounded-full">
+            共 {categories[activeCategory]?.phrases.length} 句
+          </span>
+        </div>
+
         <div className="space-y-2.5">
           {categories[activeCategory]?.phrases.map((p, idx) => {
             const [jp, cn] = p.split(' (');

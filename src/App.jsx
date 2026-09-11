@@ -13,12 +13,12 @@ import {
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
 const firebaseConfig = {
-  apiKey: "AIzaSyBh0YDP353os0h_CwjJ04K4U9NTVDa2nn4",
-  authDomain: "tripmate-c8148.firebaseapp.com",
-  projectId: "tripmate-c8148",
-  storageBucket: "tripmate-c8148.firebasestorage.app",
-  messagingSenderId: "1051971323186",
-  appId: "1:1051971323186:web:c6596264c4de9fe9ad032b"
+  apiKey: "填入你的真實_apiKey",
+  authDomain: "填入你的真實_authDomain",
+  projectId: "填入你的真實_projectId",
+  storageBucket: "填入你的真實_storageBucket",
+  messagingSenderId: "填入你的真實_messagingSenderId",
+  appId: "填入你的真實_appId"
 };
 
 // 初始化 Firebase
@@ -256,9 +256,44 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (備忘錄穿插時間軸顯示) ---
+// --- 視圖組件: 首頁 (自動辨識日期並顯示「日期 + 第O天」或「最後一天」) ---
 function HomeView({ items, wishlistItems }) {
-  const timelineItems = items.sort((a, b) => (a.datetime || a.checkInDate || '9999').localeCompare(b.datetime || b.checkInDate || '9999'));
+  // 1. 整理時間並排序
+  const timelineItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      const timeA = a.datetime || a.checkInDate || '9999';
+      const timeB = b.datetime || b.checkInDate || '9999';
+      return timeA.localeCompare(timeB);
+    });
+  }, [items]);
+
+  // 2. 提取出所有不重複的日期清單 (YYYY-MM-DD)
+  const uniqueDates = useMemo(() => {
+    const dates = timelineItems
+      .map(item => {
+        const fullTime = item.datetime || item.checkInDate || '';
+        return fullTime ? fullTime.split('T')[0].split(' ')[0] : null;
+      })
+      .filter(Boolean);
+    return Array.from(new Set(dates)).sort();
+  }, [timelineItems]);
+
+  // 3. 建立日期對應的「第 O 天」或「最後一天」標籤字典
+  const dateDayMap = useMemo(() => {
+    const map = {};
+    const totalDays = uniqueDates.length;
+    uniqueDates.forEach((dateStr, idx) => {
+      if (totalDays === 1) {
+        map[dateStr] = "當日行程";
+      } else if (idx === totalDays - 1) {
+        map[dateStr] = "最後一天";
+      } else {
+        map[dateStr] = `第 ${idx + 1} 天`;
+      }
+    });
+    return map;
+  }, [uniqueDates]);
+
   const wishlistCategories = [
     { id: '吃', icon: <Utensils size={18}/>, color: 'text-orange-600', bgColor: 'bg-orange-50' },
     { id: '喝', icon: <Coffee size={18}/>, color: 'text-blue-600', bgColor: 'bg-blue-50' },
@@ -276,7 +311,7 @@ function HomeView({ items, wishlistItems }) {
         <div className="space-y-6 relative">
           <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-emerald-200/50"></div>
           {timelineItems.length === 0 ? <div className="ml-10 p-6 bg-white rounded-2xl text-stone-400 border border-stone-100">尚無行程</div> : 
-            timelineItems.map((item) => {
+            timelineItems.map((item, index) => {
               const isMemo = item.type === 'memo';
               let Icon = MapPin;
               if (item.type === 'flight') Icon = Plane;
@@ -284,8 +319,31 @@ function HomeView({ items, wishlistItems }) {
               else if (item.type === 'accommodation') Icon = BedDouble;
               else if (isMemo) Icon = StickyNote;
 
+              // 取出當前項目的日期
+              const fullTime = item.datetime || item.checkInDate || '';
+              const currentDate = fullTime ? fullTime.split('T')[0].split(' ')[0] : null;
+
+              // 判斷是否為「該日期的第一筆行程」，若為第一筆則在時間軸圓點前顯示「日期 + 第O天」
+              const prevItem = index > 0 ? timelineItems[index - 1] : null;
+              const prevDate = prevItem ? (prevItem.datetime || prevItem.checkInDate || '').split('T')[0].split(' ')[0] : null;
+              const isFirstItemOfDay = currentDate && currentDate !== prevDate;
+              const dayLabel = currentDate ? dateDayMap[currentDate] : '';
+
               return (
                 <div key={item.id} className="relative ml-10">
+                  {/* 同一天的第一筆項目：在時間軸圓點前方合併顯示「日期 + 第O天」標題 */}
+                  {isFirstItemOfDay && (
+                    <div className="mb-3.5 -ml-8 flex items-center gap-2 z-20 relative">
+                      <div className="bg-emerald-800 text-white font-mono font-bold text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-emerald-700">
+                        <Calendar size={12} className="text-emerald-300"/>
+                        <span>{currentDate}</span>
+                        <span className="bg-emerald-600/80 text-emerald-100 px-2 py-0.2 rounded-full text-[10px]">
+                          {dayLabel}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className={`absolute -left-[42px] top-4 w-5 h-5 rounded-full border-4 border-white shadow-sm z-10 ${isMemo ? 'bg-amber-500' : 'bg-emerald-500'}`}></div>
                   <div className={`p-5 rounded-2xl shadow-sm border transition-all ${isMemo ? 'bg-amber-50/70 border-amber-200' : 'bg-white border-stone-100'}`}>
                     <div className="flex items-center gap-2 mb-1">
@@ -296,7 +354,7 @@ function HomeView({ items, wishlistItems }) {
                     </div>
                     <h3 className={`text-xl font-bold ${isMemo ? 'text-amber-950 font-sans' : 'text-stone-800'}`}>{item.title}</h3>
                     <div className={`text-sm font-medium mt-1 flex items-center gap-1 ${isMemo ? 'text-amber-700' : 'text-emerald-700'}`}>
-                      <Clock size={14}/> {item.datetime || (item.checkInDate ? `${item.checkInDate} ${item.checkInTime || ''}` : '未定時間')}
+                      <Clock size={14}/> {item.datetime ? item.datetime.replace('T', ' ') : (item.checkInDate ? `${item.checkInDate} ${item.checkInTime || ''}` : '未定時間')}
                     </div>
                     {!isMemo && item.location && (
                       <div className="text-sm text-stone-600 mt-2 flex items-center gap-1">
@@ -516,13 +574,12 @@ function WishListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 行程規劃 (支援「行程」與「備忘錄」新增與編輯) ---
+// --- 視圖組件: 行程規劃 ---
 function ItineraryView({ tripId, items }) {
   const [showAddItinerary, setShowAddItinerary] = useState(false);
   const [showAddMemo, setShowAddMemo] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   
-  // 包含景點行程與備忘錄
   const itItems = items.filter(i => !['flight','train','bus','ship','accommodation'].includes(i.type));
 
   const handleOpenEdit = (item) => {
@@ -547,7 +604,6 @@ function ItineraryView({ tripId, items }) {
           <Calendar className="text-emerald-600 inline" size={32}/> 行程規劃
         </h2>
         
-        {/* 新增按鍵群：新增行程 與 新增備忘錄 */}
         <div className="flex gap-2 flex-wrap">
           <button 
             onClick={() => { setEditingItem(null); setShowAddMemo(true); }} 
@@ -589,7 +645,7 @@ function ItineraryView({ tripId, items }) {
                 {item.title}
               </div>
               <div className={`text-sm mt-1 flex items-center gap-1 ${isMemo ? 'text-amber-700' : 'text-stone-400'}`}>
-                <Clock size={12}/> {item.datetime || '未定時間'}
+                <Clock size={12}/> {item.datetime ? item.datetime.replace('T', ' ') : '未定時間'}
               </div>
               {!isMemo && item.location && (
                 <div className="text-sm text-stone-500 mt-1 flex items-center gap-1">
@@ -624,7 +680,7 @@ function ItineraryView({ tripId, items }) {
   );
 }
 
-// --- 彈窗組件: 新增/編輯 備忘錄 (無地點欄位，專為銜接備註設計) ---
+// --- 彈窗組件: 新增/編輯 備忘錄 ---
 function AddMemoModal({ tripId, initialData, onClose }) {
   const [f, setF] = useState({ 
     title: initialData?.title || '', 
@@ -689,7 +745,7 @@ function AddMemoModal({ tripId, initialData, onClose }) {
   );
 }
 
-// --- 視圖組件: 交通情報 (含編輯功能) ---
+// --- 視圖組件: 交通情報 ---
 function TransportView({ tripId, items }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -721,7 +777,7 @@ function TransportView({ tripId, items }) {
               </div>
               <div className="font-bold text-lg text-stone-800">{item.title}</div>
               <div className="text-sm font-bold text-stone-700 mt-1 flex items-center gap-1"><ArrowRightLeft size={14} className="text-stone-400"/> {item.originDest}</div>
-              <div className="text-xs text-stone-400 mt-2 flex items-center gap-1"><Clock size={12}/> {item.datetime}</div>
+              <div className="text-xs text-stone-400 mt-2 flex items-center gap-1"><Clock size={12}/> {item.datetime ? item.datetime.replace('T', ' ') : ''}</div>
             </div>
             <div className="flex flex-col items-center gap-1 ml-4">
               <button onClick={()=>handleOpenEdit(item)} className="text-stone-400 hover:text-blue-600 p-2 transition-colors" title="編輯票券">
@@ -739,7 +795,7 @@ function TransportView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 住宿登錄 (含編輯功能) ---
+// --- 視圖組件: 住宿登錄 ---
 function AccommodationView({ tripId, items }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingItem, setEditingItem] = useState(null);

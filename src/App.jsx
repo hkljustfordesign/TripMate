@@ -13,12 +13,12 @@ import {
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
 const firebaseConfig = {
-  apiKey: "填入你的真實_apiKey",
-  authDomain: "填入你的真實_authDomain",
-  projectId: "填入你的真實_projectId",
-  storageBucket: "填入你的真實_storageBucket",
-  messagingSenderId: "填入你的真實_messagingSenderId",
-  appId: "填入你的真實_appId"
+  apiKey: "AIzaSyBh0YDP353os0h_CwjJ04K4U9NTVDa2nn4",
+  authDomain: "tripmate-c8148.firebaseapp.com",
+  projectId: "tripmate-c8148",
+  storageBucket: "tripmate-c8148.firebasestorage.app",
+  messagingSenderId: "1051971323186",
+  appId: "1:1051971323186:web:c6596264c4de9fe9ad032b"
 };
 
 // 初始化 Firebase

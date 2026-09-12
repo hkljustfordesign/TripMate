@@ -9,7 +9,7 @@ import {
   Luggage, ClipboardList, Heart, Volume2, Coffee, 
   Briefcase, Gamepad2, Smile, Home, Map, Armchair,
   UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil, Tag, StickyNote,
-  Calculator, UserCheck, ArrowRight, Layers, Eye
+  Calculator, UserCheck, ArrowRight, Layers, Eye, Hourglass
 } from 'lucide-react';
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
@@ -37,6 +37,21 @@ const detectCurrency = (id) => {
   if (/europe|france|paris|germany|berlin|italy|rome|英國|歐洲|法國|巴黎|德國|柏林|義大利|羅馬/.test(text)) return 'EUR';
   if (/thailand|bangkok|泰國|曼谷/.test(text)) return 'THB';
   return 'TWD'; 
+};
+
+// --- 計算停留時間輔助函式 ---
+const calculateDuration = (start, end) => {
+  if (!start || !end) return null;
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const diffMs = endDate - startDate;
+  if (diffMs <= 0) return null;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const hours = Math.floor(diffMins / 60);
+  const mins = diffMins % 60;
+  if (hours > 0 && mins > 0) return `${hours}小時 ${mins}分鐘`;
+  if (hours > 0) return `${hours}小時`;
+  return `${mins}分鐘`;
 };
 
 const fontStyle = `
@@ -262,7 +277,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (交通情報直接顯示起訖點與座位) ---
+// --- 視圖組件: 首頁 ---
 function HomeView({ items, wishlistItems }) {
   const timelineItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -331,6 +346,8 @@ function HomeView({ items, wishlistItems }) {
               const isFirstItemOfDay = currentDate && currentDate !== prevDate;
               const dayLabel = currentDate ? dateDayMap[currentDate] : '';
 
+              const durationText = calculateDuration(item.datetime, item.endDatetime);
+
               return (
                 <div key={item.id} className="relative ml-10">
                   {isFirstItemOfDay && (
@@ -358,15 +375,27 @@ function HomeView({ items, wishlistItems }) {
                       }`}>
                         {isMemo ? '旅遊備忘註記' : item.type}
                       </span>
+                      {durationText && (
+                        <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-100">
+                          <Hourglass size={10}/> 停留 {durationText}
+                        </span>
+                      )}
                     </div>
                     <h3 className={`text-xl font-bold ${isMemo ? 'text-amber-950 font-sans' : 'text-stone-800'}`}>{item.title}</h3>
-                    <div className={`text-sm font-medium mt-1 flex items-center gap-1 ${
+                    <div className={`text-sm font-medium mt-1 flex items-center gap-1 flex-wrap ${
                       isMemo ? 'text-amber-700' : isTransport ? 'text-blue-700' : 'text-emerald-700'
                     }`}>
-                      <Clock size={14}/> {item.datetime ? item.datetime.replace('T', ' ') : (item.checkInDate ? `${item.checkInDate} ${item.checkInTime || ''}` : '未定時間')}
+                      <Clock size={14}/> 
+                      {item.datetime ? (
+                        <span>
+                          {item.datetime.replace('T', ' ')}
+                          {item.endDatetime && (
+                            <span className="text-stone-400 font-normal"> ➜ {item.endDatetime.includes('T') ? item.endDatetime.split('T')[1] : item.endDatetime}</span>
+                          )}
+                        </span>
+                      ) : (item.checkInDate ? `${item.checkInDate} ${item.checkInTime || ''}` : '未定時間')}
                     </div>
 
-                    {/* 交通情報專屬：直接在首頁顯示起訖點與座位 */}
                     {isTransport && (
                       <div className="mt-3 pt-2.5 border-t border-blue-100/60 flex flex-wrap gap-2 text-xs">
                         {item.originDest && (
@@ -500,12 +529,12 @@ function TodoListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 願望清單 (含熱點分佈可視化) ---
+// --- 視圖組件: 願望清單 ---
 function WishListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
   const [note, setNote] = useState('');
   const [cat, setCat] = useState('吃');
-  const [viewMode, setViewMode] = useState('list'); // 'list' 或 'map'
+  const [viewMode, setViewMode] = useState('list');
   
   const categories = [
     { id: '吃', icon: <Utensils size={16}/> },
@@ -647,12 +676,12 @@ function WishListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 行程規劃 (支援單日行程動線軌跡可視化) ---
+// --- 視圖組件: 行程規劃 (顯示起訖時間與停留時間) ---
 function ItineraryView({ tripId, items }) {
   const [showAddItinerary, setShowAddItinerary] = useState(false);
   const [showAddMemo, setShowAddMemo] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [viewMode, setViewMode] = useState('list'); // 'list' 或 'route'
+  const [viewMode, setViewMode] = useState('list');
   
   const itItems = items.filter(i => !['flight','train','bus','ship','accommodation'].includes(i.type));
 
@@ -725,38 +754,51 @@ function ItineraryView({ tripId, items }) {
             {itItems.filter(i => i.location).length === 0 ? (
               <div className="text-stone-300 text-sm text-center py-10">尚無包含地點的景點行程可呈現動線</div>
             ) : (
-              itItems.filter(i => i.location).map((item, idx, arr) => (
-                <div key={item.id} className="relative">
-                  <div className="flex items-start gap-3 p-4 bg-stone-50 rounded-2xl border border-stone-200/80">
-                    <div className="w-7 h-7 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
-                      {idx + 1}
+              itItems.filter(i => i.location).map((item, idx, arr) => {
+                const duration = calculateDuration(item.datetime, item.endDatetime);
+                return (
+                  <div key={item.id} className="relative">
+                    <div className="flex items-start gap-3 p-4 bg-stone-50 rounded-2xl border border-stone-200/80">
+                      <div className="w-7 h-7 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
+                        {idx + 1}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-stone-800 text-base">{item.title}</h4>
+                          {duration && (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.2 rounded-full font-bold">
+                              {duration}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-stone-500 mt-0.5 flex items-center gap-1">
+                          <Clock size={12}/> {item.datetime ? item.datetime.replace('T', ' ') : '未定時間'}
+                          {item.endDatetime && ` ➜ ${item.endDatetime.includes('T') ? item.endDatetime.split('T')[1] : item.endDatetime}`}
+                        </p>
+                        <p className="text-xs text-emerald-700 mt-1 font-medium flex items-center gap-1">
+                          <MapPin size={12}/> {item.location}
+                        </p>
+                      </div>
+                      <a href={getNavigationLink(item.location)} target="_blank" rel="noreferrer" className="p-2.5 bg-white text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl shadow-sm border border-stone-100 transition">
+                        <Navigation size={16}/>
+                      </a>
                     </div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-stone-800 text-base">{item.title}</h4>
-                      <p className="text-xs text-stone-500 mt-0.5 flex items-center gap-1">
-                        <Clock size={12}/> {item.datetime ? item.datetime.replace('T', ' ') : '未定時間'}
-                      </p>
-                      <p className="text-xs text-emerald-700 mt-1 font-medium flex items-center gap-1">
-                        <MapPin size={12}/> {item.location}
-                      </p>
-                    </div>
-                    <a href={getNavigationLink(item.location)} target="_blank" rel="noreferrer" className="p-2.5 bg-white text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl shadow-sm border border-stone-100 transition">
-                      <Navigation size={16}/>
-                    </a>
+                    {idx < arr.length - 1 && (
+                      <div className="flex items-center justify-center py-1">
+                        <ArrowRight size={16} className="text-emerald-400 rotate-90"/>
+                      </div>
+                    )}
                   </div>
-                  {idx < arr.length - 1 && (
-                    <div className="flex items-center justify-center py-1">
-                      <ArrowRight size={16} className="text-emerald-400 rotate-90"/>
-                    </div>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
       ) : (
         itItems.map(item => {
           const isMemo = item.type === 'memo';
+          const duration = calculateDuration(item.datetime, item.endDatetime);
+
           return (
             <div 
               key={item.id} 
@@ -765,7 +807,7 @@ function ItineraryView({ tripId, items }) {
               }`}
             >
               <div className="flex-1">
-                <div className="flex items-center gap-1.5 mb-1">
+                <div className="flex items-center gap-2 mb-1">
                   {isMemo ? (
                     <span className="text-xs font-bold text-amber-700 uppercase bg-amber-100/70 px-2 py-0.5 rounded-md flex items-center gap-1">
                       <StickyNote size={12}/> 備忘註記
@@ -775,12 +817,25 @@ function ItineraryView({ tripId, items }) {
                       {item.type}
                     </span>
                   )}
+                  {duration && (
+                    <span className="text-xs bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-100 flex items-center gap-1">
+                      <Hourglass size={12}/> 預計停留 {duration}
+                    </span>
+                  )}
                 </div>
                 <div className={`font-bold text-lg ${isMemo ? 'text-amber-950 font-sans' : 'text-stone-800'}`}>
                   {item.title}
                 </div>
-                <div className={`text-sm mt-1 flex items-center gap-1 ${isMemo ? 'text-amber-700' : 'text-stone-400'}`}>
-                  <Clock size={12}/> {item.datetime ? item.datetime.replace('T', ' ') : '未定時間'}
+                <div className={`text-sm mt-1 flex items-center gap-1 flex-wrap ${isMemo ? 'text-amber-700' : 'text-stone-400'}`}>
+                  <Clock size={12}/> 
+                  {item.datetime ? (
+                    <span>
+                      {item.datetime.replace('T', ' ')}
+                      {item.endDatetime && (
+                        <span className="text-stone-500 font-medium"> ➜ {item.endDatetime.includes('T') ? item.endDatetime.split('T')[1] : item.endDatetime}</span>
+                      )}
+                    </span>
+                  ) : '未定時間'}
                 </div>
                 {!isMemo && item.location && (
                   <div className="text-sm text-stone-500 mt-1 flex items-center gap-1">
@@ -876,6 +931,68 @@ function AddMemoModal({ tripId, initialData, onClose }) {
       </div>
     </div>
   );
+}
+
+// --- 彈窗組件: 新增/編輯行程規劃 (支援起訖時間登打) ---
+function AddItineraryModal({ tripId, initialData, onClose }) { 
+  const [f, setF] = useState({ 
+    title: initialData?.title || '', 
+    datetime: initialData?.datetime || '', 
+    endDatetime: initialData?.endDatetime || '', 
+    type: initialData?.type || 'sight', 
+    location: initialData?.location || '' 
+  }); 
+
+  const sub = async (e) => { 
+    e.preventDefault(); 
+    if (initialData?.id) {
+      await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
+    } else {
+      await addDoc(collection(db, 'trips', tripId, 'items'), { ...f, createdAt: serverTimestamp() });
+    }
+    onClose(); 
+  }; 
+
+  const inputClass = "w-full p-3 bg-stone-50 border rounded-xl outline-none focus:border-emerald-500";
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl">
+        <h3 className="font-bold text-xl mb-4 text-emerald-900">
+          {initialData ? '編輯行程規劃' : '新增行程規劃'}
+        </h3>
+        <form onSubmit={sub} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">景點名稱</label>
+            <input className={inputClass} placeholder="景點名稱" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required/>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">開始時間</label>
+              <input type="datetime-local" className={inputClass} value={f.datetime} onChange={e=>setF({...f, datetime:e.target.value})} required/>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">結束時間 (選填)</label>
+              <input type="datetime-local" className={inputClass} value={f.endDatetime} onChange={e=>setF({...f, endDatetime:e.target.value})}/>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">地點 (與地圖導航連動)</label>
+            <input className={inputClass} placeholder="地點或地址" value={f.location} onChange={e=>setF({...f, location:e.target.value})} required/>
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600">取消</button>
+            <button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg hover:bg-emerald-700">
+              {initialData ? '更新行程' : '確認新增'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  ); 
 }
 
 // --- 視圖組件: 交通情報 ---
@@ -1169,7 +1286,7 @@ function JapanesePhrases() {
   );
 }
 
-// --- 視圖組件: 記帳分帳 (含「誰來付錢」成員管理、下拉付款人與智慧結算報表) ---
+// --- 視圖組件: 記帳分帳 ---
 function ExpenseView({ tripId, expenses, members }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
@@ -1182,9 +1299,8 @@ function ExpenseView({ tripId, expenses, members }) {
     return sum + (Number(item.amount) * (rates[item.currency] || 1));
   }, 0);
 
-  // --- 智慧結算演算法 ---
   const settlementData = useMemo(() => {
-    const balances = {}; // 每人的淨餘額 (代墊為正, 應付為負)
+    const balances = {};
 
     expenses.forEach(exp => {
       const rate = rates[exp.currency] || 1;
@@ -1202,7 +1318,6 @@ function ExpenseView({ tripId, expenses, members }) {
       }
     });
 
-    // 區分 debtors (需付錢) 與 creditors (需收款)
     let debtors = [];
     let creditors = [];
 
@@ -1215,7 +1330,6 @@ function ExpenseView({ tripId, expenses, members }) {
       }
     });
 
-    // 貪婪簡化債務網
     const transfers = [];
     let dIdx = 0;
     let cIdx = 0;
@@ -1295,7 +1409,6 @@ function ExpenseView({ tripId, expenses, members }) {
 
       {reportMode ? (
         <div className="space-y-6">
-          {/* 成員淨餘額表 */}
           <div className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm space-y-4">
             <h3 className="font-bold text-emerald-900 text-lg flex items-center gap-2">
               <UserCheck size={20} className="text-emerald-600"/> 成員收支總覽 (折合台幣)
@@ -1316,7 +1429,6 @@ function ExpenseView({ tripId, expenses, members }) {
             </div>
           </div>
 
-          {/* 最少轉帳次數智慧結算 */}
           <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-md space-y-4">
             <h3 className="font-bold text-emerald-900 text-lg flex items-center gap-2">
               <Calculator size={20} className="text-emerald-600"/> 最佳化轉帳結算建議 (最少次數)
@@ -1386,7 +1498,7 @@ function ExpenseView({ tripId, expenses, members }) {
   );
 }
 
-// --- 彈窗組件: 「誰來付錢」成員名單管理 ---
+// --- 彈窗組件: 成員名單管理 ---
 function MembersManagementModal({ tripId, members, onClose }) {
   const [newMemberName, setNewMemberName] = useState('');
 
@@ -1452,7 +1564,7 @@ function MembersManagementModal({ tripId, members, onClose }) {
   );
 }
 
-// --- 彈窗組件: 新增/編輯支出 (支援成員下拉選單) ---
+// --- 彈窗組件: 新增/編輯支出 ---
 function AddExpenseModal({ tripId, initialData, members, onClose }) {
   const defaultCurrency = useMemo(() => detectCurrency(tripId), [tripId]);
   const [f, setF] = useState({
@@ -1529,7 +1641,6 @@ function AddExpenseModal({ tripId, initialData, members, onClose }) {
             <div className="w-2/3"><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">總金額</label><input type="number" required placeholder="0" className={inputStyle} value={f.amount} onChange={e=>setF({...f, amount:e.target.value})}/></div>
           </div>
 
-          {/* 付款人下拉選擇 */}
           <div>
             <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">付款人</label>
             {members && members.length > 0 ? (
@@ -1563,39 +1674,11 @@ function AddExpenseModal({ tripId, initialData, members, onClose }) {
             {splitMode === 'average' ? (
               <div>
                 <label className="block text-xs font-bold text-emerald-800 mb-2 ml-1">分攤人數</label>
-                <input type="number" min="1" className={inputStyle} value={numPeople} onChange={e=>setNumPeople(Number(e.target.value))}/>
-                <div className="mt-2 text-right text-sm font-bold text-emerald-600">
-                  每人應付約 {f.currency} {f.amount && numPeople ? Math.round(f.amount / numPeople).toLocaleString() : 0}
-                </div>
-              </div>
+                <input type="number" min="1" className={inputStyle} value={numPeople} onChange={e=>setNumPeople(Number(e.target.value))}/><div className="mt-2 text-right text-sm font-bold text-emerald-600">每人應付約 {f.currency} {f.amount && numPeople ? Math.round(f.amount / numPeople).toLocaleString() : 0}</div></div>
             ) : (
               <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="block text-xs font-bold text-emerald-800 ml-1">分攤名單</label>
-                  <button type="button" onClick={()=>handleAddPerson()} className="text-emerald-600 text-[10px] font-bold">+ 新增成員</button>
-                </div>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {manualSplits.map((s, i) => (
-                    <div key={i} className="flex gap-2">
-                      {members.length > 0 ? (
-                        <select 
-                          className="w-1/2 p-2 bg-white border rounded-lg text-sm" 
-                          value={s.name} 
-                          onChange={e=>updateManualSplit(i, 'name', e.target.value)}
-                        >
-                          <option value="">選擇成員</option>
-                          {members.map(m => (
-                            <option key={m.id} value={m.name}>{m.name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input type="text" placeholder="人名" className="w-1/2 p-2 bg-white border rounded-lg text-sm" value={s.name} onChange={e=>updateManualSplit(i, 'name', e.target.value)}/>
-                      )}
-                      <input type="number" placeholder="金額" className="w-1/3 p-2 bg-white border rounded-lg text-sm font-mono" value={s.amount} onChange={e=>updateManualSplit(i, 'amount', e.target.value)}/>
-                      <button type="button" onClick={()=>handleRemovePerson(i)} className="text-stone-300 hover:text-red-500"><UserMinus size={16}/></button>
-                    </div>
-                  ))}
-                </div>
+                <div className="flex justify-between items-center"><label className="block text-xs font-bold text-emerald-800 ml-1">分攤名單</label><button type="button" onClick={()=>handleAddPerson()} className="text-emerald-600 text-[10px] font-bold">+ 新增成員</button></div>
+                <div className="space-y-2 max-h-40 overflow-y-auto">{manualSplits.map((s, i) => (<div key={i} className="flex gap-2">{members.length > 0 ? (<select className="w-1/2 p-2 bg-white border rounded-lg text-sm" value={s.name} onChange={e=>updateManualSplit(i, 'name', e.target.value)}><option value="">選擇成員</option>{members.map(m => (<option key={m.id} value={m.name}>{m.name}</option>))}</select>) : (<input type="text" placeholder="人名" className="w-1/2 p-2 bg-white border rounded-lg text-sm" value={s.name} onChange={e=>updateManualSplit(i, 'name', e.target.value)}/>)}<input type="number" placeholder="金額" className="w-1/3 p-2 bg-white border rounded-lg text-sm font-mono" value={s.amount} onChange={e=>updateManualSplit(i, 'amount', e.target.value)}/><button type="button" onClick={()=>handleRemovePerson(i)} className="text-stone-300 hover:text-red-500"><UserMinus size={16}/></button></div>))}</div>
               </div>
             )}
           </div>
@@ -1748,49 +1831,6 @@ function AddTransportModal({ tripId, initialData, onClose }) {
             <button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600">取消</button>
             <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg">
               {initialData ? '更新票券' : '確認新增'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  ); 
-}
-
-// --- 彈窗組件: 新增/編輯行程規劃 ---
-function AddItineraryModal({ tripId, initialData, onClose }) { 
-  const [f, setF] = useState({ 
-    title: initialData?.title || '', 
-    datetime: initialData?.datetime || '', 
-    type: initialData?.type || 'sight', 
-    location: initialData?.location || '' 
-  }); 
-
-  const sub = async (e) => { 
-    e.preventDefault(); 
-    if (initialData?.id) {
-      await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
-    } else {
-      await addDoc(collection(db, 'trips', tripId, 'items'), { ...f, createdAt: serverTimestamp() });
-    }
-    onClose(); 
-  }; 
-
-  const inputClass = "w-full p-3 bg-stone-50 border rounded-xl outline-none focus:border-emerald-500";
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl">
-        <h3 className="font-bold text-xl mb-4 text-emerald-900">
-          {initialData ? '編輯行程規劃' : '新增行程規劃'}
-        </h3>
-        <form onSubmit={sub} className="space-y-4">
-          <input className={inputClass} placeholder="景點名稱" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required/>
-          <input type="datetime-local" className={inputClass} value={f.datetime} onChange={e=>setF({...f, datetime:e.target.value})} required/>
-          <input className={inputClass} placeholder="地點" value={f.location} onChange={e=>setF({...f, location:e.target.value})} required/>
-          <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold">取消</button>
-            <button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold">
-              {initialData ? '更新行程' : '確認新增'}
             </button>
           </div>
         </form>

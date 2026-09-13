@@ -54,13 +54,15 @@ const calculateDuration = (start, end) => {
   return `${mins}分鐘`;
 };
 
-// --- 取得項目標準排序時間 (住宿包含入住日期與時間，自動補零對齊格式) ---
+// --- 取得項目標準排序時間 (全面相容 datetime 與 checkInDatetime) ---
 const getItemSortTime = (item) => {
   if (!item) return '9999-99-99T99:99';
   if (item.datetime) return item.datetime;
+  if (item.checkInDatetime) return item.checkInDatetime;
+  // 向下相容舊版分開欄位
   if (item.checkInDate) {
     let time = item.checkInTime || '15:00';
-    if (time.length === 4) time = '0' + time; // 避免 9:00 造成排序偏差
+    if (time.length === 4) time = '0' + time;
     return `${item.checkInDate}T${time}`;
   }
   return '9999-99-99T99:99';
@@ -200,7 +202,6 @@ function TripDashboard({ tripId, userId, onLeave }) {
   useEffect(() => {
     if (!tripId || !userId) return;
 
-    // 依據完整時間戳記 (含住宿入住時間) 進行排序
     const unsubItems = onSnapshot(collection(db, 'trips', tripId, 'items'), (snap) => {
       setItems(
         snap.docs
@@ -294,7 +295,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (住宿精準依照入住時間排序) ---
+// --- 視圖組件: 首頁 (完整精準依照日期與時間穿插) ---
 function HomeView({ items, wishlistItems }) {
   const timelineItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -419,9 +420,11 @@ function HomeView({ items, wishlistItems }) {
                       <Clock size={14}/> 
                       {isAccommodation ? (
                         <span>
-                          入住: {item.checkInDate || '未定日期'} {item.checkInTime ? `(${item.checkInTime})` : ''}
-                          {item.checkOutDate && (
-                            <span className="text-stone-400 font-normal ml-2">➜ 退房: {item.checkOutDate} {item.checkOutTime ? `(${item.checkOutTime})` : ''}</span>
+                          入住: {(item.checkInDatetime || `${item.checkInDate || ''} ${item.checkInTime || ''}`).replace('T', ' ')}
+                          {(item.checkOutDatetime || item.checkOutDate) && (
+                            <span className="text-stone-400 font-normal ml-2">
+                              ➜ 退房: {(item.checkOutDatetime || `${item.checkOutDate || ''} ${item.checkOutTime || ''}`).replace('T', ' ')}
+                            </span>
                           )}
                         </span>
                       ) : item.datetime ? (
@@ -434,6 +437,7 @@ function HomeView({ items, wishlistItems }) {
                       ) : '未定時間'}
                     </div>
 
+                    {/* 交通情報專屬資訊 */}
                     {isTransport && (
                       <div className="mt-3 pt-2.5 border-t border-blue-100/60 flex flex-wrap gap-2 text-xs">
                         {item.originDest && (
@@ -979,8 +983,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
     location: initialData?.location || '' 
   }); 
 
-  const sub = async (e) => 
-  { 
+  const sub = async (e) => { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1135,7 +1138,7 @@ function AddTransportModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 住宿登錄 ---
+// --- 視圖組件: 住宿登錄 (時間統一採 datetime-local 格式) ---
 function AccommodationView({ tripId, items }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -1164,10 +1167,10 @@ function AccommodationView({ tripId, items }) {
             <div className="text-sm text-stone-500 mb-3 flex items-center gap-1"><MapPin size={14}/> {i.location} <a href={getGoogleMapsLink(i.location)} target="_blank" rel="noreferrer" className="ml-2 text-blue-500 font-bold hover:underline text-xs">地圖</a></div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-stone-50 p-4 rounded-2xl border border-stone-50 shadow-inner">
               <div className="text-xs text-stone-600">
-                <strong>入住:</strong> {i.checkInDate || '未定日期'} <span className="text-stone-400 font-mono ml-1">({i.checkInTime || '--:--'})</span>
+                <strong>入住時間:</strong> {(i.checkInDatetime || `${i.checkInDate || ''} ${i.checkInTime || ''}`).replace('T', ' ') || '未定時間'}
               </div>
               <div className="text-xs text-stone-600">
-                <strong>退房:</strong> {i.checkOutDate || '未定日期'} <span className="text-stone-400 font-mono ml-1">({i.checkOutTime || '--:--'})</span>
+                <strong>退房時間:</strong> {(i.checkOutDatetime || `${i.checkOutDate || ''} ${i.checkOutTime || ''}`).replace('T', ' ') || '未定時間'}
               </div>
               <div className="text-xs flex items-center gap-1"><strong>早餐服務:</strong> {i.hasBreakfast === '是' ? <span className="text-emerald-600 flex items-center font-bold"><Coffee size={12} className="mr-0.5"/>含早餐</span> : <span className="text-stone-400">無</span>}</div>
               <div className="text-xs flex items-center gap-1"><strong>行李寄放:</strong> {i.canStoreLuggage === '是' ? <span className="text-emerald-600 flex items-center font-bold"><Briefcase size={12} className="mr-0.5"/>可寄放</span> : <span className="text-stone-400">不可</span>}</div>
@@ -1188,16 +1191,14 @@ function AccommodationView({ tripId, items }) {
   );
 }
 
-// --- 彈窗組件: 新增/編輯住宿 ---
+// --- 彈窗組件: 新增/編輯住宿 (改為與行程相同的 datetime-local 欄位) ---
 function AddAccommodationModal({ tripId, initialData, onClose }) { 
   const [f, setF] = useState({ 
     title: initialData?.title || '', 
     type: 'accommodation', 
     location: initialData?.location || '', 
-    checkInDate: initialData?.checkInDate || '',
-    checkInTime: initialData?.checkInTime || '15:00', 
-    checkOutDate: initialData?.checkOutDate || '',
-    checkOutTime: initialData?.checkOutTime || '11:00', 
+    checkInDatetime: initialData?.checkInDatetime || (initialData?.checkInDate ? `${initialData.checkInDate}T${initialData.checkInTime || '15:00'}` : ''),
+    checkOutDatetime: initialData?.checkOutDatetime || (initialData?.checkOutDate ? `${initialData.checkOutDate}T${initialData.checkOutTime || '11:00'}` : ''),
     hasBreakfast: initialData?.hasBreakfast || '否', 
     canStoreLuggage: initialData?.canStoreLuggage || '否' 
   }); 
@@ -1230,26 +1231,26 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
             <input className={inputClass} placeholder="輸入地址或地點" value={f.location} onChange={e=>setF({...f, location:e.target.value})} required />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">入住日期</label>
-              <input type="date" className={inputClass} value={f.checkInDate} onChange={e=>setF({...f, checkInDate:e.target.value})} required />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">入住時間</label>
-              <input type="time" className={inputClass} value={f.checkInTime} onChange={e=>setF({...f, checkInTime:e.target.value})} />
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">預計入住時間 (年/月/日 時間)</label>
+            <input 
+              type="datetime-local" 
+              className={inputClass} 
+              value={f.checkInDatetime} 
+              onChange={e=>setF({...f, checkInDatetime: e.target.value})} 
+              required 
+            />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">退房日期</label>
-              <input type="date" className={inputClass} value={f.checkOutDate} onChange={e=>setF({...f, checkOutDate:e.target.value})} required />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">退房時間</label>
-              <input type="time" className={inputClass} value={f.checkOutTime} onChange={e=>setF({...f, checkOutTime:e.target.value})} />
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">預計退房時間 (年/月/日 時間)</label>
+            <input 
+              type="datetime-local" 
+              className={inputClass} 
+              value={f.checkOutDatetime} 
+              onChange={e=>setF({...f, checkOutDatetime: e.target.value})} 
+              required 
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -1350,7 +1351,603 @@ function JapanesePhrases() {
         "カーナビを英語か中国語にできますか (導航能換成中文或英文嗎？)",
         "レギュラー満タンでお願いします (請加滿 Regular 一般汽油)",
         "軽油を満タンでお願いします (請加滿柴油)",
-        "タイヤの空気圧を点検してください (請幫我檢查胎壓)",
+        "タイヤの空気圧を點検してください (請幫我檢查胎壓)",
+        "窓を拭いてもらえますか (可以幫忙擦一下車窗嗎？)",
+        "ゴミを捨ててもらえますか (可以幫我倒一下垃圾嗎？)",
+        "◯◯はどこですか (請問◯◯在哪裡？)",
+        "ここはどこですか (請問這裡現在是哪裡？)",
+        "駅へはどう行けばいいですか (請問到車站該怎麼走？)",
+        "近くにトイレはありますか (這附近有洗手間嗎？)",
+        "近くに駐車場はありますか (這附近有停車場嗎？)",
+        "写真を撮っていただけますか (可以幫我們拍張照片嗎？)"
+      ]
+    },
+    "購物 🛍️": {
+      fullName: "試穿 / 試吃 / 結帳",
+      icon: <ShoppingBag size={18} className="text-pink-600"/>,
+      phrases: [
+        "いくらですか (請問這個多少錢？)",
+        "試着してもいいですか (請問可以試穿嗎？)",
+        "これの他のサイズはありますか (這款有其他尺寸嗎？)",
+        "他の色はありますか (這款有其他顏色嗎？)",
+        "試食してもいいですか (請問可以試吃嗎？)",
+        "香りを試してもいいですか (請問可以試聞香味嗎？)",
+        "新しい在庫はありますか (請問有新的庫存嗎？)",
+        "これを見せてください (請讓我看一下這個)",
+        "少し考えます (我再考慮看看，謝謝)",
+        "これをください (我要買這個)",
+        "プレゼント用です (這是要送禮用的包裝)",
+        "袋はいりません (我不需要塑膠袋)",
+        "クレジットカードは使えますか (可以刷信用卡嗎？)",
+        "電子マネーで払えますか (可以使用電子支付/交通卡嗎？)",
+        "領収書をお願いします (請開收據發票)"
+      ]
+    },
+    "機場 ✈️": {
+      fullName: "出入境 / 退稅相關",
+      icon: <Compass size={18} className="text-teal-600"/>,
+      phrases: [
+        "免税手続きをお願いします (麻煩請幫我辦理免稅手續)",
+        "免税カウンターはどこですか (請問免稅櫃台在哪裡？)",
+        "パスポートを持っています (我有隨身攜帶護照)",
+        "観光で来ました (我是來觀光旅遊的)",
+        "◯日間滞在します (我預計停留◯天)",
+        "◯◯ホテルに泊まります (我會住在◯◯飯店)",
+        "搭乗口は何番ですか (請問登機門是幾號？)",
+        "受託手荷物は何キロまでですか (請問托運行李限重幾公斤？)",
+        "荷物を預けたいです (我想要辦理行李托運)",
+        "壊れ物が入っています (行李箱裡面有易碎品)",
+        "手荷物受取所はどこですか (行李領取處在哪裡？)",
+        "荷物が出てきません (我的行李一直沒有出來)",
+        "リムジンバス乗り場はどこですか (請問利木津巴士搭車處在哪？)",
+        "税関申告書はこちらです (這是我的海關申報單)",
+        "日本円に両替できますか (這裡可以兌換日幣現金嗎？)"
+      ]
+    }
+  };
+
+  const [activeCategory, setActiveCategory] = useState("招呼 👋");
+
+  return (
+    <div className="space-y-6 pb-8">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        {Object.entries(categories).map(([shortKey, catData]) => (
+          <button
+            key={shortKey}
+            type="button"
+            onClick={() => setActiveCategory(shortKey)}
+            className={`py-3 px-2 rounded-2xl font-bold text-xs transition-all flex flex-col items-center justify-center gap-1 border ${
+              activeCategory === shortKey 
+                ? 'bg-emerald-600 text-white shadow-md border-emerald-600 scale-[1.02]' 
+                : 'bg-white text-stone-700 hover:bg-stone-50 border-stone-200'
+            }`}
+          >
+            <span className="text-base">{shortKey.split(' ')[1]}</span>
+            <span className="truncate">{shortKey.split(' ')[0]}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 space-y-3">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-bold text-lg text-emerald-900 flex items-center gap-2">
+            {categories[activeCategory]?.icon}
+            {categories[activeCategory]?.fullName}
+          </h3>
+          <span className="text-xs bg-stone-100 text-stone-500 font-bold px-2.5 py-1 rounded-full">
+            共 {categories[activeCategory]?.phrases.length} 句
+          </span>
+        </div>
+
+        <div className="space-y-2.5">
+          {categories[activeCategory]?.phrases.map((p, idx) => {
+            const [jp, cn] = p.split(' (');
+            return (
+              <div 
+                key={idx} 
+                onClick={() => playGoogleAudio(jp)}
+                className="flex justify-between items-center bg-stone-50 hover:bg-emerald-50/60 p-3.5 rounded-2xl border border-stone-100 transition-colors cursor-pointer group"
+              >
+                <div>
+                  <div className="font-bold text-stone-800 text-base group-hover:text-emerald-900 transition-colors">{jp}</div>
+                  <div className="text-xs text-stone-500 group-hover:text-emerald-700 mt-0.5">{cn ? cn.replace(')', '') : ''}</div>
+                </div>
+                <button 
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); playGoogleAudio(jp); }}
+                  className="p-2.5 text-emerald-600 hover:bg-emerald-100/70 rounded-xl transition-all active:scale-90"
+                  title="播放語音"
+                >
+                  <Volume2 size={20} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- 視圖組件: 記帳分帳 ---
+function ExpenseView({ tripId, expenses, members }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [reportMode, setReportMode] = useState(false);
+
+  const rates = { JPY: 0.22, USD: 32, EUR: 35, KRW: 0.024, THB: 0.9, TWD: 1 };
+
+  const totalTWD = expenses.reduce((sum, item) => {
+    return sum + (Number(item.amount) * (rates[item.currency] || 1));
+  }, 0);
+
+  const settlementData = useMemo(() => {
+    const balances = {};
+
+    expenses.forEach(exp => {
+      const rate = rates[exp.currency] || 1;
+      const amountTWD = Number(exp.amount) * rate;
+      const payer = exp.payer || '未具名';
+
+      balances[payer] = (balances[payer] || 0) + amountTWD;
+
+      if (exp.splitDetails && exp.splitDetails.length > 0) {
+        exp.splitDetails.forEach(detail => {
+          const person = detail.name || '未具名';
+          const splitAmountTWD = Number(detail.amount) * rate;
+          balances[person] = (balances[person] || 0) - splitAmountTWD;
+        });
+      }
+    });
+
+    let debtors = [];
+    let creditors = [];
+
+    Object.entries(balances).forEach(([name, bal]) => {
+      const roundBal = Math.round(bal);
+      if (roundBal < -1) {
+        debtors.push({ name, amount: -roundBal });
+      } else if (roundBal > 1) {
+        creditors.push({ name, amount: roundBal });
+      }
+    });
+
+    const transfers = [];
+    let dIdx = 0;
+    let cIdx = 0;
+
+    while (dIdx < debtors.length && cIdx < creditors.length) {
+      const debtor = debtors[dIdx];
+      const creditor = creditors[cIdx];
+      const settleAmount = Math.min(debtor.amount, creditor.amount);
+
+      transfers.push({
+        from: debtor.name,
+        to: creditor.name,
+        amount: settleAmount
+      });
+
+      debtor.amount -= settleAmount;
+      creditor.amount -= settleAmount;
+
+      if (debtor.amount <= 1) dIdx++;
+      if (creditor.amount <= 1) cIdx++;
+    }
+
+    return { balances, transfers };
+  }, [expenses]);
+
+  const handleOpenEdit = (exp) => {
+    setEditingExpense(exp);
+    setShowAdd(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowAdd(false);
+    setEditingExpense(null);
+  };
+
+  return (
+    <div className="space-y-8 max-w-4xl mx-auto">
+      <div className="flex justify-between items-end mb-8 flex-wrap gap-3">
+        <div>
+          <h2 className="text-3xl font-bold text-emerald-900 flex gap-2 items-center"><Wallet className="text-emerald-600" size={32}/> 記帳分帳</h2>
+          <div className="mt-2 text-stone-500 font-bold text-2xl flex items-baseline gap-1">
+            <span className="text-sm font-medium">總支出約</span> NT$ {Math.round(totalTWD).toLocaleString()}
+          </div>
+          <div className="flex mt-2 bg-white p-1 rounded-2xl border border-stone-200 shadow-sm w-fit">
+            <button 
+              type="button"
+              onClick={()=>setReportMode(false)}
+              className={`px-3 py-1 rounded-xl font-bold text-xs transition ${!reportMode ? 'bg-emerald-600 text-white shadow-sm' : 'text-stone-500'}`}
+            >
+              支出明細
+            </button>
+            <button 
+              type="button"
+              onClick={()=>setReportMode(true)}
+              className={`px-3 py-1 rounded-xl font-bold text-xs transition flex items-center gap-1 ${reportMode ? 'bg-emerald-600 text-white shadow-sm' : 'text-stone-500'}`}
+            >
+              <Calculator size={14}/> 智慧結算報表
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button 
+            onClick={() => setShowMembersModal(true)} 
+            className="bg-stone-800 hover:bg-stone-900 text-white px-4 py-3 rounded-2xl flex items-center gap-1.5 font-bold shadow-md transition active:scale-95"
+          >
+            <Users size={18}/> 誰來付錢
+          </button>
+          <button 
+            onClick={()=>{ setEditingExpense(null); setShowAdd(true); }} 
+            className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg btn-active-effect hover:bg-emerald-700"
+          >
+            <Plus size={20} /> 新增支出
+          </button>
+        </div>
+      </div>
+
+      {reportMode ? (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm space-y-4">
+            <h3 className="font-bold text-emerald-900 text-lg flex items-center gap-2">
+              <UserCheck size={20} className="text-emerald-600"/> 成員收支總覽 (折合台幣)
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {Object.keys(settlementData.balances).length === 0 ? (
+                <div className="text-stone-400 text-xs col-span-2 py-4 text-center">尚無支出紀錄可結算</div>
+              ) : Object.entries(settlementData.balances).map(([name, bal]) => (
+                <div key={name} className="p-4 bg-stone-50 rounded-2xl border border-stone-200 flex justify-between items-center">
+                  <span className="font-bold text-stone-800">{name}</span>
+                  <div className="text-right">
+                    <span className={`text-sm font-bold font-mono ${bal >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {bal >= 0 ? `應收 NT$ ${Math.round(bal).toLocaleString()}` : `應付 NT$ ${Math.abs(Math.round(bal)).toLocaleString()}`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-md space-y-4">
+            <h3 className="font-bold text-emerald-900 text-lg flex items-center gap-2">
+              <Calculator size={20} className="text-emerald-600"/> 最佳化轉帳結算建議 (最少次數)
+            </h3>
+            <div className="space-y-3">
+              {settlementData.transfers.length === 0 ? (
+                <div className="p-6 bg-emerald-50 rounded-2xl text-emerald-800 text-xs font-bold text-center">
+                  🎉 目前帳目完全平衡，無需任何轉帳！
+                </div>
+              ) : settlementData.transfers.map((t, idx) => (
+                <div key={idx} className="p-4 bg-stone-50 rounded-2xl border border-stone-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-stone-800 font-bold">
+                    <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-lg text-xs">{t.from}</span>
+                    <ArrowRight size={16} className="text-stone-400"/>
+                    <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-lg text-xs">{t.to}</span>
+                  </div>
+                  <span className="font-mono font-bold text-emerald-700 text-base">
+                    NT$ {t.amount.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-[32px] shadow-sm border border-stone-100 divide-y divide-stone-100 overflow-hidden">
+          {expenses.length === 0 ? <div className="p-10 text-center text-stone-400">尚無紀錄</div> : expenses.map(exp => (
+            <div key={exp.id} className="p-5 flex flex-col hover:bg-stone-50 transition-colors">
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex-1">
+                  <h4 className="font-bold text-stone-800 text-lg">{exp.title}</h4>
+                  <div className="text-xs text-stone-500 mt-1">
+                    <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded font-bold">{exp.payer} 付款</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-right">
+                  <div className="font-mono font-bold text-stone-800 text-lg">{exp.currency} {Number(exp.amount).toLocaleString()}</div>
+                  <div className="flex flex-col items-center gap-1">
+                    <button onClick={()=>handleOpenEdit(exp)} className="text-stone-400 hover:text-emerald-600 p-1.5 transition-colors" title="編輯支出">
+                      <Pencil size={18} />
+                    </button>
+                    <button onClick={()=>deleteDoc(doc(db, 'trips', tripId, 'expenses', exp.id))} className="text-stone-200 hover:text-red-500 transition-colors p-1.5" title="刪除支出">
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-stone-50 p-3 rounded-xl border border-stone-100">
+                <div className="text-[10px] font-bold text-stone-400 mb-1 flex items-center gap-1 uppercase tracking-wider"><Users size={10}/> 分攤明細 ({exp.splitMode === 'average' ? '自動平均' : '手動分攤'})</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {exp.splitDetails?.map((detail, idx) => (
+                    <div key={idx} className="flex justify-between items-center bg-white px-3 py-1.5 rounded-lg border border-stone-100 shadow-sm">
+                      <span className="text-xs text-stone-600 font-medium truncate max-w-[50px]">{detail.name}</span>
+                      <span className="text-xs font-bold text-emerald-600">{exp.currency} {Math.round(detail.amount).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showAdd && <AddExpenseModal tripId={tripId} initialData={editingExpense} members={members} onClose={handleCloseModal} />}
+      {showMembersModal && <MembersManagementModal tripId={tripId} members={members} onClose={()=>setShowMembersModal(false)} />}
+    </div>
+  );
+}
+
+// --- 彈窗組件: 成員名單管理 ---
+function MembersManagementModal({ tripId, members, onClose }) {
+  const [newMemberName, setNewMemberName] = useState('');
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    if (!newMemberName.trim()) return;
+    await addDoc(collection(db, 'trips', tripId, 'members'), {
+      name: newMemberName.trim(),
+      createdAt: serverTimestamp()
+    });
+    setNewMemberName('');
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-[32px] w-full max-w-md p-6 shadow-2xl space-y-4">
+        <h3 className="font-bold text-xl text-stone-900 flex items-center gap-2">
+          <Users size={24} className="text-emerald-600"/> 誰來付錢（旅程成員設定）
+        </h3>
+        <p className="text-xs text-stone-500">
+          在此輸入本次旅行的夥伴名稱或綽號，記帳時即可直接從選單挑選付款人與分攤成員！
+        </p>
+
+        <form onSubmit={handleAdd} className="flex gap-2">
+          <input 
+            type="text" 
+            value={newMemberName} 
+            onChange={e => setNewMemberName(e.target.value)} 
+            placeholder="成員姓名或綽號 (例: 小美、阿強)" 
+            className="flex-1 p-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-emerald-500 text-sm"
+          />
+          <button type="submit" className="bg-stone-900 text-white px-5 py-3 rounded-xl font-bold text-sm shadow-md hover:bg-stone-800">
+            新增
+          </button>
+        </form>
+
+        <div className="space-y-2 max-h-56 overflow-y-auto pr-1 menu-scrollbar">
+          {members.length === 0 ? (
+            <div className="text-center py-6 text-stone-300 text-xs font-bold">尚無成員名單，快在上方新增吧！</div>
+          ) : members.map(m => (
+            <div key={m.id} className="flex items-center justify-between p-3 bg-stone-50 rounded-xl border border-stone-100">
+              <span className="font-bold text-stone-800 text-sm">{m.name}</span>
+              <button 
+                type="button" 
+                onClick={()=>deleteDoc(doc(db, 'trips', tripId, 'members', m.id))}
+                className="text-stone-300 hover:text-red-500 p-1 transition-colors"
+              >
+                <Trash2 size={16}/>
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <button 
+          type="button" 
+          onClick={onClose} 
+          className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-md hover:bg-emerald-700 transition mt-2"
+        >
+          完成設定
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// --- 彈窗組件: 新增/編輯支出 ---
+function AddExpenseModal({ tripId, initialData, members, onClose }) {
+  const defaultCurrency = useMemo(() => detectCurrency(tripId), [tripId]);
+  const [f, setF] = useState({
+    title: initialData?.title || '',
+    amount: initialData?.amount || '',
+    payer: initialData?.payer || (members[0]?.name || ''),
+    currency: initialData?.currency || defaultCurrency
+  });
+  const [splitMode, setSplitMode] = useState(initialData?.splitMode || 'average');
+  const [numPeople, setNumPeople] = useState(initialData?.splitMode === 'average' && initialData?.splitDetails ? initialData.splitDetails.length : (members.length || 2));
+  const [manualSplits, setManualSplits] = useState(
+    initialData?.splitMode === 'manual' && initialData?.splitDetails 
+      ? initialData.splitDetails 
+      : [{ name: '', amount: '' }]
+  );
+
+  const handleAddPerson = (name = '') => setManualSplits([...manualSplits, { name, amount: '' }]);
+  const handleRemovePerson = (index) => setManualSplits(manualSplits.filter((_, i) => i !== index));
+  const updateManualSplit = (index, field, value) => {
+    const newSplits = [...manualSplits];
+    newSplits[index][field] = value;
+    setManualSplits(newSplits);
+  };
+
+  const sub = async (e) => {
+    e.preventDefault();
+    let finalSplitDetails = [];
+    const totalAmount = Number(f.amount);
+
+    if (splitMode === 'average') {
+      const perPerson = totalAmount / numPeople;
+      if (members.length >= numPeople) {
+        for (let i = 0; i < numPeople; i++) {
+          finalSplitDetails.push({ name: members[i]?.name || `成員 ${i + 1}`, amount: perPerson });
+        }
+      } else {
+        for (let i = 1; i <= numPeople; i++) {
+          finalSplitDetails.push({ name: members[i - 1]?.name || `成員 ${i}`, amount: perPerson });
+        }
+      }
+    } else {
+      finalSplitDetails = manualSplits.map(s => ({ name: s.name || '未具名', amount: Number(s.amount) || 0 }));
+    }
+
+    const payload = {
+      ...f,
+      splitMode,
+      splitDetails: finalSplitDetails
+    };
+
+    if (initialData?.id) {
+      await updateDoc(doc(db, 'trips', tripId, 'expenses', initialData.id), payload);
+    } else {
+      await addDoc(collection(db, 'trips', tripId, 'expenses'), {
+        ...payload,
+        createdAt: serverTimestamp()
+      });
+    }
+    onClose();
+  };
+
+  const inputStyle = "w-full p-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-emerald-500 transition-colors";
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-[32px] w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+        <h3 className="font-bold text-xl mb-4 text-emerald-900 flex items-center gap-2">
+          <CreditCard size={24}/> {initialData ? '編輯支出與分攤' : '新增支出與分攤'}
+        </h3>
+        <form onSubmit={sub} className="space-y-4 overflow-y-auto menu-scrollbar pr-1">
+          <div><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">項目名稱</label><input type="text" required placeholder="例如: 飯店餐費、門票" className={inputStyle} value={f.title} onChange={e=>setF({...f, title:e.target.value})}/></div>
+          <div className="flex gap-2">
+            <div className="w-1/3"><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">幣別</label><select className={inputStyle} value={f.currency} onChange={e=>setF({...f, currency:e.target.value})}><option value="TWD">TWD</option><option value="JPY">JPY</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="KRW">KRW</option><option value="THB">THB</option></select></div>
+            <div className="w-2/3"><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">總金額</label><input type="number" required placeholder="0" className={inputStyle} value={f.amount} onChange={e=>setF({...f, amount:e.target.value})}/></div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">付款人</label>
+            {members && members.length > 0 ? (
+              <select 
+                className={inputStyle} 
+                value={f.payer} 
+                onChange={e=>setF({...f, payer: e.target.value})}
+                required
+              >
+                {members.map(m => (
+                  <option key={m.id} value={m.name}>{m.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input 
+                type="text" 
+                required 
+                placeholder="誰先付的錢？(可點選上方「誰來付錢」新增常駐名單)" 
+                className={inputStyle} 
+                value={f.payer} 
+                onChange={e=>setF({...f, payer:e.target.value})}
+              />
+            )}
+          </div>
+
+          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
+            <div className="flex gap-2 mb-4 p-1 bg-white rounded-xl border border-stone-200 shadow-inner">
+              <button type="button" onClick={()=>setSplitMode('average')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${splitMode==='average' ? 'bg-emerald-600 text-white shadow-md' : 'text-stone-400'}`}>自動平均</button>
+              <button type="button" onClick={()=>setSplitMode('manual')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${splitMode==='manual' ? 'bg-emerald-600 text-white shadow-md' : 'text-stone-400'}`}>手動分攤</button>
+            </div>
+            {splitMode === 'average' ? (
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-2 ml-1">分攤人數</label>
+                <input type="number" min="1" className={inputStyle} value={numPeople} onChange={e=>setNumPeople(Number(e.target.value))}/><div className="mt-2 text-right text-sm font-bold text-emerald-600">每人應付約 {f.currency} {f.amount && numPeople ? Math.round(f.amount / numPeople).toLocaleString() : 0}</div></div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center"><label className="block text-xs font-bold text-emerald-800 ml-1">分攤名單</label><button type="button" onClick={()=>handleAddPerson()} className="text-emerald-600 text-[10px] font-bold">+ 新增成員</button></div>
+                <div className="space-y-2 max-h-40 overflow-y-auto">{manualSplits.map((s, i) => (<div key={i} className="flex gap-2">{members.length > 0 ? (<select className="w-1/2 p-2 bg-white border rounded-lg text-sm" value={s.name} onChange={e=>updateManualSplit(i, 'name', e.target.value)}><option value="">選擇成員</option>{members.map(m => (<option key={m.id} value={m.name}>{m.name}</option>))}</select>) : (<input type="text" placeholder="人名" className="w-1/2 p-2 bg-white border rounded-lg text-sm" value={s.name} onChange={e=>updateManualSplit(i, 'name', e.target.value)}/>)}<input type="number" placeholder="金額" className="w-1/3 p-2 bg-white border rounded-lg text-sm font-mono" value={s.amount} onChange={e=>updateManualSplit(i, 'amount', e.target.value)}/><button type="button" onClick={()=>handleRemovePerson(i)} className="text-stone-300 hover:text-red-500"><UserMinus size={16}/></button></div>))}</div>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 py-4 bg-stone-100 rounded-xl font-bold text-stone-600">取消</button>
+            <button type="submit" className="flex-1 py-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg">
+              {initialData ? '更新分攤' : '儲存分攤'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// --- 視圖組件: 旅遊工具箱 ---
+function ToolsView() {
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">
+      <div className="flex items-center justify-between border-b border-stone-200 pb-4">
+        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3">
+          <Settings className="text-emerald-600" size={32}/> 日本旅遊實用會話
+        </h2>
+        <span className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full font-bold flex items-center gap-1">
+          <Volume2 size={14}/> 點擊即可發音
+        </span>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <JapanesePhrases />
+      </div>
+    </div>
+  );
+}
+
+// --- 子組件: 日語實用會話 ---
+function JapanesePhrases() {
+  const categories = { 
+    "招呼 👋": {
+      fullName: "常用招呼",
+      icon: <Smile size={18} className="text-emerald-600"/>,
+      phrases: [
+        "こんにちは (你好)",
+        "ありがとうございます (謝謝你)",
+        "すみません (不好意思 / 借過)",
+        "ごめんなさい (對不起)",
+        "お願いします (麻煩您了 / 請)",
+        "はい / いいえ (好的 / 不是)",
+        "英語が話せますか (你會說英文嗎？)",
+        "日本語がわかりません (我不太懂日語)",
+        "これをお願いします (請給我這個)",
+        "大丈夫です (沒關係 / 不用了)",
+        "さようなら (再見)"
+      ]
+    },
+    "餐飲 🍽️": {
+      fullName: "訂位 / 餐廳 / 菜單",
+      icon: <Utensils size={18} className="text-orange-600"/>,
+      phrases: [
+        "予約した◯◯です (我是有預約的◯◯)",
+        "予約していません、◯名です (沒有預約，我們有◯位)",
+        "メニューをいただけますか (請給我菜單)",
+        "おすすめは何ですか (推薦的餐點是什麼？)",
+        "注文をお願いします (麻煩請幫我點餐)",
+        "これと同じものをください (請給我一份和這個一樣的)",
+        "お水をもらえますか (可以給我杯水嗎？)",
+        "牛肉は入っていますか (這裡面有牛肉嗎？)",
+        "パクチーを抜いてください (請幫我不要加香菜)",
+        "辛くしないでください (請不要做得太辣)",
+        "ラストオーダーは何時ですか (最後加點是幾點？)",
+        "持ち帰りはできますか (可以外帶嗎？)",
+        "お会計をお願いします (麻煩結帳)",
+        "別々に会計できますか (可以分開結帳嗎？)",
+        "ごちそうさまでした (謝謝招待 / 吃飽了)"
+      ]
+    },
+    "交通 🚗": {
+      fullName: "租車 / 加油 / 問路",
+      icon: <Fuel size={18} className="text-blue-600"/>,
+      phrases: [
+        "レンタカーの予約をしています (我有預約租車)",
+        "国際免許証はこちらです (這是我的國際駕照)",
+        "ETCカードをレンタルしたいです (我想租借ETC卡)",
+        "カーナビを英語か中国語にできますか (導航能換成中文或英文嗎？)",
+        "レギュラー満タンでお願いします (請加滿 Regular 一般汽油)",
+        "軽油を満タンでお願いします (請加滿柴油)",
+        "タイヤの空気圧を點検してください (請幫我檢查胎壓)",
         "窓を拭いてもらえますか (可以幫忙擦一下車窗嗎？)",
         "ゴミを捨ててもらえますか (可以幫我倒一下垃圾嗎？)",
         "◯◯はどこですか (請問◯◯在哪裡？)",

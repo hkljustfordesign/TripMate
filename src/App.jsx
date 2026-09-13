@@ -9,7 +9,7 @@ import {
   Luggage, ClipboardList, Heart, Volume2, Coffee, 
   Briefcase, Gamepad2, Smile, Home, Map, Armchair,
   UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil, Tag, StickyNote,
-  Calculator, UserCheck, ArrowRight, Layers, Eye, Hourglass
+  Calculator, UserCheck, ArrowRight, Hourglass
 } from 'lucide-react';
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
@@ -54,11 +54,14 @@ const calculateDuration = (start, end) => {
   return `${mins}分鐘`;
 };
 
-// --- 取得項目標準排序時間 (住宿包含入住日期與時間) ---
+// --- 取得項目標準排序時間 (住宿包含入住日期與時間，自動補零對齊格式) ---
 const getItemSortTime = (item) => {
+  if (!item) return '9999-99-99T99:99';
   if (item.datetime) return item.datetime;
   if (item.checkInDate) {
-    return `${item.checkInDate}T${item.checkInTime || '15:00'}`;
+    let time = item.checkInTime || '15:00';
+    if (time.length === 4) time = '0' + time; // 避免 9:00 造成排序偏差
+    return `${item.checkInDate}T${time}`;
   }
   return '9999-99-99T99:99';
 };
@@ -197,7 +200,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
   useEffect(() => {
     if (!tripId || !userId) return;
 
-    // 依據完整時間 (包含住宿之入住日期+入住時間) 進行精準排序
+    // 依據完整時間戳記 (含住宿入住時間) 進行排序
     const unsubItems = onSnapshot(collection(db, 'trips', tripId, 'items'), (snap) => {
       setItems(
         snap.docs
@@ -291,7 +294,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (精準以入住時間排序時間軸) ---
+// --- 視圖組件: 首頁 (住宿精準依照入住時間排序) ---
 function HomeView({ items, wishlistItems }) {
   const timelineItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -397,7 +400,7 @@ function HomeView({ items, wishlistItems }) {
                         isTransport ? 'text-blue-600' : 
                         isAccommodation ? 'text-indigo-700' : 'text-emerald-600'
                       }`}>
-                        {isMemo ? '旅遊備忘註記' : isAccommodation ? '住宿入住' : item.type}
+                        {isMemo ? '旅遊備忘註記' : isAccommodation ? '住宿登錄' : item.type}
                       </span>
                       {durationText && (
                         <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-100">
@@ -431,7 +434,6 @@ function HomeView({ items, wishlistItems }) {
                       ) : '未定時間'}
                     </div>
 
-                    {/* 交通情報專屬資訊 */}
                     {isTransport && (
                       <div className="mt-3 pt-2.5 border-t border-blue-100/60 flex flex-wrap gap-2 text-xs">
                         {item.originDest && (
@@ -859,9 +861,7 @@ function ItineraryView({ tripId, items }) {
                     </span>
                   )}
                 </div>
-                <div className={`font-bold text-lg ${isMemo ? 'text-amber-950 font-sans' : 'text-stone-800'}`}>
-                  {item.title}
-                </div>
+                <div className={`font-bold text-lg ${isMemo ? 'text-amber-950 font-sans' : 'text-stone-800'}`}>{item.title}</div>
                 <div className={`text-sm mt-1 flex items-center gap-1 flex-wrap ${isMemo ? 'text-amber-700' : 'text-stone-400'}`}>
                   <Clock size={12}/> 
                   {item.datetime ? (
@@ -979,7 +979,8 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
     location: initialData?.location || '' 
   }); 
 
-  const sub = async (e) => { 
+  const sub = async (e) => 
+  { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);

@@ -54,12 +54,11 @@ const calculateDuration = (start, end) => {
   return `${mins}分鐘`;
 };
 
-// --- 取得項目標準排序時間 (全面相容 datetime 與 checkInDatetime) ---
+// --- 取得項目標準排序時間 (全面對齊 YYYY-MM-DDTHH:mm 格式) ---
 const getItemSortTime = (item) => {
   if (!item) return '9999-99-99T99:99';
   if (item.datetime) return item.datetime;
   if (item.checkInDatetime) return item.checkInDatetime;
-  // 向下相容舊版分開欄位
   if (item.checkInDate) {
     let time = item.checkInTime || '15:00';
     if (time.length === 4) time = '0' + time;
@@ -202,6 +201,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
   useEffect(() => {
     if (!tripId || !userId) return;
 
+    // 依據完整時間 (包含住宿之入住日期+時間) 精準排序
     const unsubItems = onSnapshot(collection(db, 'trips', tripId, 'items'), (snap) => {
       setItems(
         snap.docs
@@ -295,7 +295,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (完整精準依照日期與時間穿插) ---
+// --- 視圖組件: 首頁 (住宿入住與退房精準穿插時間軸) ---
 function HomeView({ items, wishlistItems }) {
   const timelineItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -447,7 +447,7 @@ function HomeView({ items, wishlistItems }) {
                         )}
                         {item.seat && (
                           <span className="bg-white text-emerald-700 font-bold px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
-                            <Armchair size={12} className="text-emerald-500"/> 座位: {item.seat}
+                            <Armchair size={12}/> 座位: {item.seat}
                           </span>
                         )}
                       </div>
@@ -1138,7 +1138,7 @@ function AddTransportModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 住宿登錄 (時間統一採 datetime-local 格式) ---
+// --- 視圖組件: 住宿登錄 ---
 function AccommodationView({ tripId, items }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -1191,7 +1191,7 @@ function AccommodationView({ tripId, items }) {
   );
 }
 
-// --- 彈窗組件: 新增/編輯住宿 (改為與行程相同的 datetime-local 欄位) ---
+// --- 唯一且標準的住宿彈窗 (單一 datetime-local 欄位，徹底解決重複函式覆蓋問題) ---
 function AddAccommodationModal({ tripId, initialData, onClose }) { 
   const [f, setF] = useState({ 
     title: initialData?.title || '', 
@@ -1232,7 +1232,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">預計入住時間 (年/月/日 時間)</label>
+            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">入住時間 (年/月/日 時間)</label>
             <input 
               type="datetime-local" 
               className={inputClass} 
@@ -1243,7 +1243,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">預計退房時間 (年/月/日 時間)</label>
+            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">退房時間 (年/月/日 時間)</label>
             <input 
               type="datetime-local" 
               className={inputClass} 
@@ -1872,194 +1872,6 @@ function AddExpenseModal({ tripId, initialData, members, onClose }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
-  );
-}
-
-// --- 視圖組件: 旅遊工具箱 ---
-function ToolsView() {
-  return (
-    <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">
-      <div className="flex items-center justify-between border-b border-stone-200 pb-4">
-        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3">
-          <Settings className="text-emerald-600" size={32}/> 日本旅遊實用會話
-        </h2>
-        <span className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full font-bold flex items-center gap-1">
-          <Volume2 size={14}/> 點擊即可發音
-        </span>
-      </div>
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <JapanesePhrases />
-      </div>
-    </div>
-  );
-}
-
-// --- 子組件: 日語實用會話 ---
-function JapanesePhrases() {
-  const categories = { 
-    "招呼 👋": {
-      fullName: "常用招呼",
-      icon: <Smile size={18} className="text-emerald-600"/>,
-      phrases: [
-        "こんにちは (你好)",
-        "ありがとうございます (謝謝你)",
-        "すみません (不好意思 / 借過)",
-        "ごめんなさい (對不起)",
-        "お願いします (麻煩您了 / 請)",
-        "はい / いいえ (好的 / 不是)",
-        "英語が話せますか (你會說英文嗎？)",
-        "日本語がわかりません (我不太懂日語)",
-        "これをお願いします (請給我這個)",
-        "大丈夫です (沒關係 / 不用了)",
-        "さようなら (再見)"
-      ]
-    },
-    "餐飲 🍽️": {
-      fullName: "訂位 / 餐廳 / 菜單",
-      icon: <Utensils size={18} className="text-orange-600"/>,
-      phrases: [
-        "予約した◯◯です (我是有預約的◯◯)",
-        "予約していません、◯名です (沒有預約，我們有◯位)",
-        "メニューをいただけますか (請給我菜單)",
-        "おすすめは何ですか (推薦的餐點是什麼？)",
-        "注文をお願いします (麻煩請幫我點餐)",
-        "これと同じものをください (請給我一份和這個一樣的)",
-        "お水をもらえますか (可以給我杯水嗎？)",
-        "牛肉は入っていますか (這裡面有牛肉嗎？)",
-        "パクチーを抜いてください (請幫我不要加香菜)",
-        "辛くしないでください (請不要做得太辣)",
-        "ラストオーダーは何時ですか (最後加點是幾點？)",
-        "持ち帰りはできますか (可以外帶嗎？)",
-        "お会計をお願いします (麻煩結帳)",
-        "別々に会計できますか (可以分開結帳嗎？)",
-        "ごちそうさまでした (謝謝招待 / 吃飽了)"
-      ]
-    },
-    "交通 🚗": {
-      fullName: "租車 / 加油 / 問路",
-      icon: <Fuel size={18} className="text-blue-600"/>,
-      phrases: [
-        "レンタカーの予約をしています (我有預約租車)",
-        "国際免許証はこちらです (這是我的國際駕照)",
-        "ETCカードをレンタルしたいです (我想租借ETC卡)",
-        "カーナビを英語か中国語にできますか (導航能換成中文或英文嗎？)",
-        "レギュラー満タンでお願いします (請加滿 Regular 一般汽油)",
-        "軽油を満タンでお願いします (請加滿柴油)",
-        "タイヤの空気圧を點検してください (請幫我檢查胎壓)",
-        "窓を拭いてもらえますか (可以幫忙擦一下車窗嗎？)",
-        "ゴミを捨ててもらえますか (可以幫我倒一下垃圾嗎？)",
-        "◯◯はどこですか (請問◯◯在哪裡？)",
-        "ここはどこですか (請問這裡現在是哪裡？)",
-        "駅へはどう行けばいいですか (請問到車站該怎麼走？)",
-        "近くにトイレはありますか (這附近有洗手間嗎？)",
-        "近くに駐車場はありますか (這附近有停車場嗎？)",
-        "写真を撮っていただけますか (可以幫我們拍張照片嗎？)"
-      ]
-    },
-    "購物 🛍️": {
-      fullName: "試穿 / 試吃 / 結帳",
-      icon: <ShoppingBag size={18} className="text-pink-600"/>,
-      phrases: [
-        "いくらですか (請問這個多少錢？)",
-        "試着してもいいですか (請問可以試穿嗎？)",
-        "これの他のサイズはありますか (這款有其他尺寸嗎？)",
-        "他の色はありますか (這款有其他顏色嗎？)",
-        "試食してもいいですか (請問可以試吃嗎？)",
-        "香りを試してもいいですか (請問可以試聞香味嗎？)",
-        "新しい在庫はありますか (請問有新的庫存嗎？)",
-        "これを見せてください (請讓我看一下這個)",
-        "少し考えます (我再考慮看看，謝謝)",
-        "これをください (我要買這個)",
-        "プレゼント用です (這是要送禮用的包裝)",
-        "袋はいりません (我不需要塑膠袋)",
-        "クレジットカードは使えますか (可以刷信用卡嗎？)",
-        "電子マネーで払えますか (可以使用電子支付/交通卡嗎？)",
-        "領収書をお願いします (請開收據發票)"
-      ]
-    },
-    "機場 ✈️": {
-      fullName: "出入境 / 退稅相關",
-      icon: <Compass size={18} className="text-teal-600"/>,
-      phrases: [
-        "免税手続きをお願いします (麻煩請幫我辦理免稅手續)",
-        "免税カウンターはどこですか (請問免稅櫃台在哪裡？)",
-        "パスポートを持っています (我有隨身攜帶護照)",
-        "観光で来ました (我是來觀光旅遊的)",
-        "◯日間滞在します (我預計停留◯天)",
-        "◯◯ホテルに泊まります (我會住在◯◯飯店)",
-        "搭乗口は何番ですか (請問登機門是幾號？)",
-        "受託手荷物は何キロまでですか (請問托運行李限重幾公斤？)",
-        "荷物を預けたいです (我想要辦理行李托運)",
-        "壊れ物が入っています (行李箱裡面有易碎品)",
-        "手荷物受取所はどこですか (行李領取處在哪裡？)",
-        "荷物が出てきません (我的行李一直沒有出來)",
-        "リムジンバス乗り場はどこですか (請問利木津巴士搭車處在哪？)",
-        "税関申告書はこちらです (這是我的海關申報單)",
-        "日本円に両替できますか (這裡可以兌換日幣現金嗎？)"
-      ]
-    }
-  };
-
-  const [activeCategory, setActiveCategory] = useState("招呼 👋");
-
-  return (
-    <div className="space-y-6 pb-8">
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-        {Object.entries(categories).map(([shortKey, catData]) => (
-          <button
-            key={shortKey}
-            type="button"
-            onClick={() => setActiveCategory(shortKey)}
-            className={`py-3 px-2 rounded-2xl font-bold text-xs transition-all flex flex-col items-center justify-center gap-1 border ${
-              activeCategory === shortKey 
-                ? 'bg-emerald-600 text-white shadow-md border-emerald-600 scale-[1.02]' 
-                : 'bg-white text-stone-700 hover:bg-stone-50 border-stone-200'
-            }`}
-          >
-            <span className="text-base">{shortKey.split(' ')[1]}</span>
-            <span className="truncate">{shortKey.split(' ')[0]}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 space-y-3">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-bold text-lg text-emerald-900 flex items-center gap-2">
-            {categories[activeCategory]?.icon}
-            {categories[activeCategory]?.fullName}
-          </h3>
-          <span className="text-xs bg-stone-100 text-stone-500 font-bold px-2.5 py-1 rounded-full">
-            共 {categories[activeCategory]?.phrases.length} 句
-          </span>
-        </div>
-
-        <div className="space-y-2.5">
-          {categories[activeCategory]?.phrases.map((p, idx) => {
-            const [jp, cn] = p.split(' (');
-            return (
-              <div 
-                key={idx} 
-                onClick={() => playGoogleAudio(jp)}
-                className="flex justify-between items-center bg-stone-50 hover:bg-emerald-50/60 p-3.5 rounded-2xl border border-stone-100 transition-colors cursor-pointer group"
-              >
-                <div>
-                  <div className="font-bold text-stone-800 text-base group-hover:text-emerald-900 transition-colors">{jp}</div>
-                  <div className="text-xs text-stone-500 group-hover:text-emerald-700 mt-0.5">{cn ? cn.replace(')', '') : ''}</div>
-                </div>
-                <button 
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); playGoogleAudio(jp); }}
-                  className="p-2.5 text-emerald-600 hover:bg-emerald-100/70 rounded-xl transition-all active:scale-90"
-                  title="播放語音"
-                >
-                  <Volume2 size={20} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
       </div>
     </div>
   );

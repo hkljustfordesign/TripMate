@@ -9,7 +9,7 @@ import {
   Luggage, ClipboardList, Heart, Volume2, Coffee, 
   Briefcase, Gamepad2, Smile, Home, Map, Armchair,
   UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil, Tag, StickyNote,
-  Calculator, UserCheck, ArrowRight, Hourglass, ChevronDown, ChevronUp
+  Calculator, UserCheck, ArrowRight, Hourglass, ChevronDown, ChevronUp, Radio, Compass as CompassIcon
 } from 'lucide-react';
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
@@ -201,6 +201,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
   useEffect(() => {
     if (!tripId || !userId) return;
 
+    // 依據完整時間精準排序
     const unsubItems = onSnapshot(collection(db, 'trips', tripId, 'items'), (snap) => {
       setItems(
         snap.docs
@@ -294,7 +295,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (願望清單折疊手風琴設計) ---
+// --- 視圖組件: 首頁 (新增「目前與下一站」置頂快捷卡片) ---
 function HomeView({ items, wishlistItems }) {
   const [openCategory, setOpenCategory] = useState('吃');
 
@@ -305,6 +306,55 @@ function HomeView({ items, wishlistItems }) {
       return timeA.localeCompare(timeB);
     });
   }, [items]);
+
+  // --- 計算「目前進行中 (NOW)」與「下一站 (NEXT)」---
+  const { currentItem, nextItem, isTripOver, isTripNotStarted } = useMemo(() => {
+    if (timelineItems.length === 0) return { currentItem: null, nextItem: null, isTripOver: false, isTripNotStarted: false };
+
+    const now = new Date();
+    let current = null;
+    let next = null;
+
+    for (let i = 0; i < timelineItems.length; i++) {
+      const item = timelineItems[i];
+      const startStr = getItemSortTime(item);
+      if (!startStr || startStr.startsWith('9999')) continue;
+
+      const startTime = new Date(startStr);
+      // 若有結束時間則以結束時間為準，否則預設該行程進行 1.5 小時
+      const endTime = item.endDatetime 
+        ? new Date(item.endDatetime) 
+        : new Date(startTime.getTime() + (90 * 60 * 1000));
+
+      // 檢查是否正在進行中
+      if (now >= startTime && now <= endTime) {
+        current = item;
+        next = timelineItems[i + 1] || null;
+        break;
+      }
+
+      // 若現在時間尚未到達此行程，且尚未設定 next
+      if (now < startTime) {
+        next = item;
+        // 若前一個行程剛結束不久，可把前一個視為 current 或保留 null
+        break;
+      }
+    }
+
+    const firstTimeStr = getItemSortTime(timelineItems[0]);
+    const lastItem = timelineItems[timelineItems.length - 1];
+    const lastTimeStr = lastItem.endDatetime || getItemSortTime(lastItem);
+
+    const isNotStarted = firstTimeStr && !firstTimeStr.startsWith('9999') && now < new Date(firstTimeStr);
+    const isOver = lastTimeStr && !lastTimeStr.startsWith('9999') && now > new Date(lastTimeStr);
+
+    return {
+      currentItem: current,
+      nextItem: next,
+      isTripOver: isOver && !current,
+      isTripNotStarted: isNotStarted && !current
+    };
+  }, [timelineItems]);
 
   const uniqueDates = useMemo(() => {
     const dates = timelineItems
@@ -340,7 +390,127 @@ function HomeView({ items, wishlistItems }) {
   ];
 
   return (
-    <div className="space-y-12 max-w-6xl mx-auto pb-10">
+    <div className="space-y-10 max-w-6xl mx-auto pb-10">
+      
+      {/* 🌟 置頂快捷卡片：目前與下一站 (Now & Next) 🌟 */}
+      {timelineItems.length > 0 && (
+        <section className="bg-gradient-to-br from-emerald-900 via-teal-950 to-stone-900 rounded-[32px] p-6 text-white shadow-xl relative overflow-hidden border border-emerald-800/40">
+          <div className="absolute -right-10 -bottom-10 opacity-10 pointer-events-none">
+            <CompassIcon size={200} />
+          </div>
+
+          <div className="flex items-center justify-between mb-5 border-b border-white/10 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              <h2 className="text-sm font-bold tracking-wider uppercase text-emerald-300">旅程即時動態 • NOW & NEXT</h2>
+            </div>
+            <div className="text-xs text-stone-300 font-mono font-medium flex items-center gap-1">
+              <Clock size={12}/> 即時同步中
+            </div>
+          </div>
+
+          {isTripNotStarted ? (
+            <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10">
+              <div className="text-xs text-emerald-300 font-bold mb-1">📅 旅程準備出發！首站行程：</div>
+              <div className="text-lg font-bold text-white mb-2">{timelineItems[0]?.title}</div>
+              <div className="text-xs text-stone-300 flex items-center gap-1">
+                <Clock size={12}/> {getItemSortTime(timelineItems[0])?.replace('T', ' ')}
+                {timelineItems[0]?.location && ` • ${timelineItems[0].location}`}
+              </div>
+            </div>
+          ) : isTripOver ? (
+            <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md text-center py-6 border border-white/10">
+              <span className="text-2xl mb-1 block">🎉</span>
+              <h3 className="font-bold text-white text-base">本次旅程已圓滿完成！</h3>
+              <p className="text-xs text-stone-300 mt-1">所有美好回憶與分帳紀錄皆已安全保存。</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* NOW 進行中 */}
+              <div className="bg-white/10 rounded-2xl p-4.5 backdrop-blur-md border border-emerald-500/30 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500 text-stone-950 flex items-center gap-1">
+                      <Radio size={12} className="animate-pulse"/> NOW 進行中
+                    </span>
+                    <span className="text-xs text-emerald-300 font-bold uppercase">
+                      {currentItem?.type === 'res' ? '餐廳' : currentItem?.type === 'accommodation' ? '住宿' : currentItem?.type || '行程'}
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-bold text-white truncate mb-1">
+                    {currentItem ? currentItem.title : "目前為自由活動時間"}
+                  </h3>
+                  <div className="text-xs text-stone-300 flex items-center gap-1 mt-1">
+                    <Clock size={12}/> 
+                    {currentItem ? (
+                      <span>
+                        {getItemSortTime(currentItem)?.split('T')[1]} 
+                        {currentItem.endDatetime && ` ➜ ${currentItem.endDatetime.includes('T') ? currentItem.endDatetime.split('T')[1] : currentItem.endDatetime}`}
+                      </span>
+                    ) : "享受悠閒步調吧"}
+                  </div>
+                </div>
+
+                {currentItem?.location && (
+                  <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-xs text-stone-300 truncate max-w-[180px] flex items-center gap-1">
+                      <MapPin size={12} className="text-emerald-400 flex-shrink-0"/> {currentItem.location}
+                    </span>
+                    <button
+                      onClick={() => window.open(getNavigationLink(currentItem.location), '_blank')}
+                      className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-stone-950 rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 shadow-md"
+                    >
+                      <Navigation size={12}/> 即刻導航
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* NEXT 下一站 */}
+              <div className="bg-black/20 rounded-2xl p-4.5 backdrop-blur-md border border-white/10 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 text-stone-200 flex items-center gap-1">
+                      NEXT 下一站
+                    </span>
+                    <span className="text-xs text-stone-400 font-bold uppercase">
+                      {nextItem?.type === 'res' ? '餐廳' : nextItem?.type === 'accommodation' ? '住宿' : nextItem?.type || ''}
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-bold text-white/90 truncate mb-1">
+                    {nextItem ? nextItem.title : "本日已無後續排程"}
+                  </h3>
+                  <div className="text-xs text-stone-300 flex items-center gap-1 mt-1">
+                    <Clock size={12}/> 
+                    {nextItem ? (
+                      <span>預計 {getItemSortTime(nextItem)?.replace('T', ' ')} 開始</span>
+                    ) : "可以回飯店休息或自由探索"}
+                  </div>
+                </div>
+
+                {nextItem?.location && (
+                  <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-xs text-stone-300 truncate max-w-[180px] flex items-center gap-1">
+                      <MapPin size={12} className="text-stone-400 flex-shrink-0"/> {nextItem.location}
+                    </span>
+                    <button
+                      onClick={() => window.open(getNavigationLink(nextItem.location), '_blank')}
+                      className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95"
+                    >
+                      <Navigation size={12}/> 查看路線
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 旅程時間軸 */}
       <section>
         <h2 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3 mb-6">
           <Home className="text-emerald-600" size={32}/> 旅程時間軸
@@ -452,7 +622,7 @@ function HomeView({ items, wishlistItems }) {
                         )}
                         {item.seat && (
                           <span className="bg-white text-emerald-700 font-bold px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
-                            <Armchair size={12}/> 座位: {item.seat}
+                            <Armchair size={12} className="text-emerald-500"/> 座位: {item.seat}
                           </span>
                         )}
                       </div>
@@ -598,7 +768,7 @@ function TodoListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 願望清單 (手風琴可摺疊選單設計) ---
+// --- 視圖組件: 願望清單 ---
 function WishListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
   const [note, setNote] = useState('');
@@ -607,11 +777,11 @@ function WishListView({ tripId, items }) {
   const [viewMode, setViewMode] = useState('list');
   
   const categories = [
-    { id: '吃', icon: <Utensils size={16}/>, color: 'text-orange-600', bgColor: 'bg-orange-50' },
-    { id: '喝', icon: <Coffee size={16}/>, color: 'text-blue-600', bgColor: 'bg-blue-50' },
-    { id: '玩', icon: <Gamepad2 size={16}/>, color: 'text-green-600', bgColor: 'bg-green-50' },
-    { id: '樂', icon: <Smile size={16}/>, color: 'text-purple-600', bgColor: 'bg-purple-50' },
-    { id: '購', icon: <ShoppingBag size={16}/>, color: 'text-rose-600', bgColor: 'bg-rose-50' }
+    { id: '吃', icon: <Utensils size={16}/> },
+    { id: '喝', icon: <Coffee size={16}/> },
+    { id: '玩', icon: <Gamepad2 size={16}/> },
+    { id: '樂', icon: <Smile size={16}/> },
+    { id: '購', icon: <ShoppingBag size={16}/> }
   ];
 
   const handleAdd = async (e) => {
@@ -650,7 +820,6 @@ function WishListView({ tripId, items }) {
         </div>
       </div>
 
-      {/* 新增願望表單 */}
       <div className="bg-white p-5 rounded-2xl border border-stone-100 shadow-sm space-y-3">
         <div className="flex gap-2 overflow-x-auto pb-1 menu-scrollbar">
           {categories.map(c => (
@@ -717,7 +886,6 @@ function WishListView({ tripId, items }) {
           </div>
         </div>
       ) : (
-        /* 手風琴摺疊分類清單 */
         <div className="space-y-4">
           {categories.map(c => {
             const catItems = items.filter(i => i.category === c.id);
@@ -780,7 +948,7 @@ function WishListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 行程規劃 (支援景點 SIGHT 與餐廳 RES 自動判定) ---
+// --- 視圖組件: 行程規劃 ---
 function ItineraryView({ tripId, items }) {
   const [showAddItinerary, setShowAddItinerary] = useState(false);
   const [showAddMemo, setShowAddMemo] = useState(false);
@@ -1045,7 +1213,7 @@ function AddMemoModal({ tripId, initialData, onClose }) {
   );
 }
 
-// --- 彈窗組件: 新增/編輯行程規劃 (支援景點名稱與餐廳名稱雙欄位自動判定) ---
+// --- 彈窗組件: 新增/編輯行程規劃 (自動判定 SIGHT 與 RES) ---
 function AddItineraryModal({ tripId, initialData, onClose }) { 
   const [sightName, setSightName] = useState(initialData?.type !== 'res' ? (initialData?.title || '') : '');
   const [restaurantName, setRestaurantName] = useState(initialData?.type === 'res' ? (initialData?.title || '') : '');
@@ -1056,7 +1224,6 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
   const sub = async (e) => { 
     e.preventDefault(); 
     
-    // 自動辨識：若餐廳有名稱且景點為空，則標記為 res；否則標記為 sight
     const isRestaurant = Boolean(restaurantName.trim()) && !sightName.trim();
     const finalTitle = isRestaurant ? restaurantName.trim() : (sightName.trim() || restaurantName.trim());
     const finalType = isRestaurant ? 'res' : 'sight';
@@ -1095,7 +1262,6 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
         </p>
 
         <form onSubmit={sub} className="space-y-4">
-          {/* 景點名稱欄位 */}
           <div>
             <label className="block text-xs font-bold text-stone-500 mb-1 ml-1 flex items-center gap-1">
               <MapPin size={12} className="text-emerald-600"/> 景點名稱 (顯示為 SIGHT)
@@ -1106,12 +1272,11 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
               value={sightName} 
               onChange={e => {
                 setSightName(e.target.value);
-                if (e.target.value) setRestaurantName(''); // 自動單選互斥
+                if (e.target.value) setRestaurantName('');
               }} 
             />
           </div>
 
-          {/* 餐廳名稱欄位 */}
           <div>
             <label className="block text-xs font-bold text-stone-500 mb-1 ml-1 flex items-center gap-1">
               <Utensils size={12} className="text-orange-600"/> 餐廳名稱 (顯示為 RES)
@@ -1122,7 +1287,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
               value={restaurantName} 
               onChange={e => {
                 setRestaurantName(e.target.value);
-                if (e.target.value) setSightName(''); // 自動單選互斥
+                if (e.target.value) setSightName('');
               }} 
             />
           </div>
@@ -1401,7 +1566,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 旅遊工具箱 (實用日語會話手冊) ---
+// --- 視圖組件: 旅遊工具箱 ---
 function ToolsView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">
@@ -1482,7 +1647,7 @@ function JapanesePhrases() {
         "写真を撮っていただけますか (可以幫我們拍張照片嗎？)"
       ]
     },
-    "購物 🛍️️": {
+    "購物 🛍️": {
       fullName: "試穿 / 試吃 / 結帳",
       icon: <ShoppingBag size={18} className="text-pink-600"/>,
       phrases: [

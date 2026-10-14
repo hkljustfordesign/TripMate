@@ -10,7 +10,7 @@ import {
   Briefcase, Gamepad2, Smile, Home, Armchair,
   UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil, Tag, StickyNote,
   Calculator, UserCheck, ArrowRight, Hourglass, ChevronDown, ChevronUp, Radio,
-  ArrowUp, ArrowDown, Pin
+  ArrowUp, ArrowDown, Pin, Umbrella
 } from 'lucide-react';
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
@@ -46,7 +46,7 @@ const calculateDuration = (start, end) => {
   const startDate = new Date(start);
   const endDate = new Date(end);
   const diffMs = endDate - startDate;
-  if (diffMs <= 0) return null;
+  if (isNaN(diffMs) || diffMs <= 0) return null;
   const diffMins = Math.floor(diffMs / (1000 * 60));
   const hours = Math.floor(diffMins / 60);
   const mins = diffMins % 60;
@@ -80,11 +80,11 @@ input, select, textarea { font-size: 16px !important; }
 .menu-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
 `;
 
-const getGoogleMapsLink = (location) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
-const getNavigationLink = (location) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location)}`;
+const getGoogleMapsLink = (location) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location || '')}`;
+const getNavigationLink = (location) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location || '')}`;
 
 const playGoogleAudio = (text) => {
-  const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ja&q=${encodeURIComponent(text)}`;
+  const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ja&q=${encodeURIComponent(text || '')}`;
   const audio = new Audio(url);
   audio.play().catch(e => console.warn("播放受限", e));
 };
@@ -118,7 +118,7 @@ export default function App() {
   }, []);
 
   const handleJoinTrip = (id) => {
-    const cleanId = id.trim().toUpperCase();
+    const cleanId = (id || '').trim().toUpperCase();
     if (!cleanId) return;
     setTripId(cleanId);
     localStorage.setItem('last_trip_id', cleanId);
@@ -337,7 +337,7 @@ function HomeView({ items, wishlistItems }) {
 
     const firstTimeStr = getItemSortTime(timelineItems[0]);
     const lastItem = timelineItems[timelineItems.length - 1];
-    const lastTimeStr = lastItem.endDatetime || getItemSortTime(lastItem);
+    const lastTimeStr = lastItem ? (lastItem.endDatetime || getItemSortTime(lastItem)) : null;
 
     const isNotStarted = firstTimeStr && !firstTimeStr.startsWith('9999') && now < new Date(firstTimeStr);
     const isOver = lastTimeStr && !lastTimeStr.startsWith('9999') && now > new Date(lastTimeStr);
@@ -728,20 +728,19 @@ function PackingListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 代辦事項 (內建便利貼狀態與置頂功能) ---
+// --- 視圖組件: 代辦事項 (包含置頂隨手便利貼) ---
 function TodoListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
   const [stickyNotes, setStickyNotes] = useState([]);
   const [newStickyText, setNewStickyText] = useState('');
   const [newStickyPin, setNewStickyPin] = useState(false);
 
-  // 獨立直接監聽便利貼集合，確保載入可靠穩定
   useEffect(() => {
     if (!tripId) return;
     const unsub = onSnapshot(collection(db, 'trips', tripId, 'sticky_notes'), (snap) => {
       const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       notes.sort((a, b) => {
-        if (a.pinned === b.pinned) {
+        if (Boolean(a.pinned) === Boolean(b.pinned)) {
           return (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0) - (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0);
         }
         return a.pinned ? -1 : 1;
@@ -812,7 +811,7 @@ function TodoListView({ tripId, items }) {
                 onChange={e => setNewStickyPin(e.target.checked)}
                 className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 accent-amber-500"
               />
-              <Pin size={13} className={newStickyPin ? "text-amber-600 fill-amber-500" : "text-stone-400"}/>
+              <Pin size={13} className={newStickyPin ? "text-amber-600" : "text-stone-400"}/>
               <span>設為重要置頂</span>
             </label>
             <button 
@@ -843,7 +842,7 @@ function TodoListView({ tripId, items }) {
                   <div className="flex items-center gap-1.5">
                     {note.pinned && (
                       <span className="text-[10px] bg-amber-500 text-white font-black px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
-                        <Pin size={10} className="fill-white"/> 置頂
+                        <Pin size={10}/> 置頂
                       </span>
                     )}
                     <span className="text-[10px] text-stone-400 font-mono">
@@ -857,7 +856,7 @@ function TodoListView({ tripId, items }) {
                       className={`p-1 rounded-lg transition ${note.pinned ? "text-amber-700 hover:bg-amber-200" : "text-stone-300 hover:text-stone-600"}`}
                       title={note.pinned ? "取消置頂" : "置頂"}
                     >
-                      <Pin size={14} className={note.pinned ? "fill-amber-600" : ""}/>
+                      <Pin size={14}/>
                     </button>
                     <button
                       type="button"
@@ -903,12 +902,8 @@ function TodoListView({ tripId, items }) {
               className="bg-white p-4 rounded-xl border border-stone-100 flex items-center shadow-sm cursor-pointer hover:bg-stone-50 transition" 
               onClick={() => updateDoc(doc(db, 'trips', tripId, 'todo', item.id), { completed: !item.completed })}
             >
-              <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>
-                {item.completed && <CheckCircle2 size={16} className="text-white"/>}
-              </div>
-              <span className={`flex-1 text-base font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>
-                {item.task}
-              </span>
+              <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>{item.completed && <CheckCircle2 size={16} className="text-white"/>}</div>
+              <span className={`flex-1 text-base font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.task}</span>
               <button 
                 type="button" 
                 onClick={(e)=>{e.stopPropagation();deleteDoc(doc(db, 'trips', tripId, 'todo', item.id))}} 
@@ -936,7 +931,7 @@ function WishListView({ tripId, items }) {
     { id: '吃', icon: <Utensils size={16}/>, color: 'text-orange-600', bgColor: 'bg-orange-50' },
     { id: '喝', icon: <Coffee size={16}/>, color: 'text-blue-600', bgColor: 'bg-blue-50' },
     { id: '玩', icon: <Gamepad2 size={16}/>, color: 'text-green-600', bgColor: 'bg-green-50' },
-    { id: '樂', icon: <Smile size={16}/>, color: 'text-purple-600', bgColor: 'bg-purple-50' },
+    { id: '樂', icon: <Smile size={18}/>, color: 'text-purple-600', bgColor: 'bg-purple-50' },
     { id: '購', icon: <ShoppingBag size={16}/>, color: 'text-rose-600', bgColor: 'bg-rose-50' }
   ];
 
@@ -1828,7 +1823,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 旅遊工具箱 (實用日語會話手冊) ---
+// --- 視圖組件: 旅遊工具箱 ---
 function ToolsView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">

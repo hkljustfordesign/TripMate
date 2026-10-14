@@ -7,7 +7,7 @@ import {
   ArrowRightLeft, Navigation, Utensils, CheckCircle2, 
   Palmtree, Wallet, Settings, ChevronRight, BedDouble, Menu, X, 
   Luggage, ClipboardList, Heart, Volume2, Coffee, 
-  Briefcase, Gamepad2, Smile, Home, Map, Armchair,
+  Briefcase, Gamepad2, Smile, Home, Armchair,
   UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil, Tag, StickyNote,
   Calculator, UserCheck, ArrowRight, Hourglass, ChevronDown, ChevronUp, Radio,
   CloudSun, CloudRain, Sun, Cloud, QrCode, ArrowUp, ArrowDown, ExternalLink, Umbrella,
@@ -69,7 +69,7 @@ const getItemSortTime = (item) => {
   return '9999-99-99T99:99';
 };
 
-// 圖片壓縮為 Base64 輔助函式 (可離線使用)
+// 圖片壓縮為 Base64 (支援離線展示)
 const compressImageToBase64 = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -103,8 +103,6 @@ input, select, textarea { font-size: 16px !important; }
 .menu-scrollbar::-webkit-scrollbar { width: 6px; }
 .menu-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
 .menu-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
-@keyframes sparkle { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } 100% { transform: scale(1); opacity: 1; } }
-.sparkle-effect { animation: sparkle 2s infinite ease-in-out; }
 `;
 
 const getGoogleMapsLink = (location) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
@@ -221,7 +219,6 @@ function TripDashboard({ tripId, userId, onLeave }) {
   const [expenses, setExpenses] = useState([]);
   const [packingItems, setPackingItems] = useState([]);
   const [todoItems, setTodoItems] = useState([]);
-  const [stickyNotes, setStickyNotes] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
   const [members, setMembers] = useState([]);
   const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -249,17 +246,6 @@ function TripDashboard({ tripId, userId, onLeave }) {
       setTodoItems(snap.docs.map(d => ({id: d.id, ...d.data()})));
     }, err => console.error("同步待辦失敗:", err));
 
-    const unsubSticky = onSnapshot(collection(db, 'trips', tripId, 'sticky_notes'), (snap) => {
-      const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      notes.sort((a, b) => {
-        if (a.pinned === b.pinned) {
-          return (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0) - (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0);
-        }
-        return a.pinned ? -1 : 1;
-      });
-      setStickyNotes(notes);
-    }, err => console.error("同步便利貼失敗:", err));
-
     const unsubWish = onSnapshot(collection(db, 'trips', tripId, 'wishlist'), (snap) => {
       setWishlistItems(snap.docs.map(d => ({id: d.id, ...d.data()})));
     }, err => console.error("同步願望失敗:", err));
@@ -268,7 +254,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
       setMembers(snap.docs.map(d => ({id: d.id, ...d.data()})));
     }, err => console.error("同步成員失敗:", err));
 
-    return () => { unsubItems(); unsubExp(); unsubPack(); unsubTodo(); unsubSticky(); unsubWish(); unsubMembers(); };
+    return () => { unsubItems(); unsubExp(); unsubPack(); unsubTodo(); unsubWish(); unsubMembers(); };
   }, [tripId, userId]);
 
   return (
@@ -288,12 +274,13 @@ function TripDashboard({ tripId, userId, onLeave }) {
           {activeTab === 'accommodation' && <AccommodationView tripId={tripId} items={items} onPreviewAttachment={setPreviewAttachment} />}
           {activeTab === 'expense' && <ExpenseView tripId={tripId} expenses={expenses} members={members} />}
           {activeTab === 'packing' && <PackingListView tripId={tripId} items={packingItems} />}
-          {activeTab === 'todo' && <TodoListView tripId={tripId} items={todoItems} stickyNotes={stickyNotes} />}
+          {activeTab === 'todo' && <TodoListView tripId={tripId} items={todoItems} />}
           {activeTab === 'wishlist' && <WishListView tripId={tripId} items={wishlistItems} />}
           {activeTab === 'tools' && <ToolsView />}
         </div>
       </main>
       
+      {/* 滿版憑證預覽 */}
       {previewAttachment && (
         <AttachmentModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
       )}
@@ -529,10 +516,6 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
       {/* 置頂快捷卡片：目前與下一站 (Now & Next) */}
       {timelineItems.length > 0 && (
         <section className="bg-gradient-to-br from-emerald-900 via-teal-950 to-stone-900 rounded-[32px] p-6 text-white shadow-xl relative overflow-hidden border border-emerald-800/40">
-          <div className="absolute -right-10 -bottom-10 opacity-10 pointer-events-none">
-            <Compass size={200} />
-          </div>
-
           <div className="flex items-center justify-between mb-5 border-b border-white/10 pb-3">
             <div className="flex items-center gap-2">
               <span className="relative flex h-3 w-3">
@@ -884,11 +867,29 @@ function PackingListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 代辦事項 (含隨手便利貼與置頂) ---
-function TodoListView({ tripId, items, stickyNotes }) {
+// --- 視圖組件: 代辦事項 (內建便利貼狀態與置頂功能) ---
+function TodoListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
+  const [stickyNotes, setStickyNotes] = useState([]);
   const [newStickyText, setNewStickyText] = useState('');
   const [newStickyPin, setNewStickyPin] = useState(false);
+
+  // 獨立監聽便利貼集合，確保即時與穩定
+  useEffect(() => {
+    if (!tripId) return;
+    const unsub = onSnapshot(collection(db, 'trips', tripId, 'sticky_notes'), (snap) => {
+      const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      notes.sort((a, b) => {
+        if (a.pinned === b.pinned) {
+          return (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0) - (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0);
+        }
+        return a.pinned ? -1 : 1;
+      });
+      setStickyNotes(notes);
+    }, err => console.error("同步便利貼失敗:", err));
+
+    return () => unsub();
+  }, [tripId]);
 
   const handleAddTodo = async (e) => {
     e.preventDefault(); if (!newItem.trim()) return;
@@ -1062,7 +1063,7 @@ function TodoListView({ tripId, items, stickyNotes }) {
   );
 }
 
-// --- 視圖組件: 行程規劃 (支援雨天備案庫、卡片微調排序) ---
+// --- 視圖組件: 行程規劃 ---
 function ItineraryView({ tripId, items }) {
   const [showAddItinerary, setShowAddItinerary] = useState(false);
   const [showAddMemo, setShowAddMemo] = useState(false);
@@ -1891,7 +1892,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 旅遊工具箱 ---
+// --- 視圖組件: 旅遊工具箱 (實用日語會話手冊) ---
 function ToolsView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">
@@ -1948,7 +1949,7 @@ function JapanesePhrases() {
         "持ち帰りはできますか (可以外帶嗎？)",
         "お会計をお願いします (麻煩結帳)",
         "別々に会計できますか (可以分開結帳嗎？)",
-        "ごちそうさ破でした (謝謝招待 / 吃飽了)"
+        "ごちそうさまでした (謝謝招待 / 吃飽了)"
       ]
     },
     "交通 🚗": {

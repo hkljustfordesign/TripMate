@@ -374,13 +374,13 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (新增「隨手備忘便籤」手風琴折疊盒) ---
+// --- 視圖組件: 首頁 (包含置頂「便條紙」手風琴折疊盒) ---
 function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
   const [openCategory, setOpenCategory] = useState('吃');
   const [weatherData, setWeatherData] = useState({});
-  const [isMemoOpen, setIsMemoOpen] = useState(false); // 首頁備忘錄折疊狀態
-  const [homeMemos, setHomeMemos] = useState([]);
-  const [newMemoInput, setNewMemoInput] = useState('');
+  const [isNoteOpen, setIsNoteOpen] = useState(false); // 首頁「便條紙」折疊開關
+  const [stickyNotes, setStickyNotes] = useState([]);
+  const [noteInput, setNoteInput] = useState('');
 
   const timelineItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -390,26 +390,26 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
     });
   }, [items]);
 
-  // 監聽首頁專用備忘錄
+  // 獨立監聽首頁專屬便條紙
   useEffect(() => {
     if (!tripId) return;
-    const unsub = onSnapshot(collection(db, 'trips', tripId, 'home_memos'), (snap) => {
-      const memos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      memos.sort((a, b) => (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0) - (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0));
-      setHomeMemos(memos);
-    }, err => console.error("同步首頁備忘失敗:", err));
+    const unsub = onSnapshot(collection(db, 'trips', tripId, 'sticky_notes'), (snap) => {
+      const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      notes.sort((a, b) => (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0) - (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0));
+      setStickyNotes(notes);
+    }, err => console.error("同步便條紙失敗:", err));
     return () => unsub();
   }, [tripId]);
 
-  const handleAddHomeMemo = async (e) => {
+  const handleAddStickyNote = async (e) => {
     e.preventDefault();
-    if (!newMemoInput.trim()) return;
-    await addDoc(collection(db, 'trips', tripId, 'home_memos'), {
-      content: newMemoInput.trim(),
+    if (!noteInput.trim()) return;
+    await addDoc(collection(db, 'trips', tripId, 'sticky_notes'), {
+      content: noteInput.trim(),
       createdAt: serverTimestamp()
     });
-    setNewMemoInput('');
-    setIsMemoOpen(true);
+    setNoteInput('');
+    setIsNoteOpen(true);
   };
 
   useEffect(() => {
@@ -649,34 +649,33 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
         </section>
       )}
 
-      {/* 🌟 2. 首頁隨手備忘便籤 (位於即時動態與時間軸之間，可展開／收合) 🌟 */}
-      <section className="bg-white rounded-2xl shadow-sm border border-amber-200/90 overflow-hidden transition-all">
+      {/* 🌟 2. 首頁「便條紙」手風琴折疊盒 (位於即時動態與時間軸正中間) 🌟 */}
+      <section className="bg-white rounded-2xl shadow-sm border border-amber-200 overflow-hidden transition-all">
         <button
           type="button"
-          onClick={() => setIsMemoOpen(!isMemoOpen)}
+          onClick={() => setIsNoteOpen(!isNoteOpen)}
           className="w-full flex items-center justify-between p-4 bg-amber-50 hover:bg-amber-100/60 transition"
         >
           <div className="flex items-center gap-2">
-            <span className="text-base">📌</span>
-            <span className="font-bold text-amber-950 text-base">隨手備忘便籤</span>
+            <span className="text-base">📝</span>
+            <span className="font-bold text-amber-950 text-base">便條紙</span>
             <span className="bg-white text-amber-900 text-xs font-bold px-2.5 py-0.5 rounded-full border border-amber-200">
-              {homeMemos.length}
+              {stickyNotes.length}
             </span>
-            <span className="text-xs text-amber-700/80 hidden sm:inline">（點擊展開／收合，隨手記文字）</span>
+            <span className="text-xs text-amber-700/80 hidden sm:inline">（點擊展開／收合，隨手記文字資訊）</span>
           </div>
           <div className="text-amber-800">
-            {isMemoOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            {isNoteOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
           </div>
         </button>
 
-        {isMemoOpen && (
+        {isNoteOpen && (
           <div className="p-4 border-t border-amber-100 bg-white space-y-3 animate-in fade-in duration-200">
-            {/* 新增備忘輸入框 */}
-            <form onSubmit={handleAddHomeMemo} className="flex gap-2">
+            <form onSubmit={handleAddStickyNote} className="flex gap-2">
               <input
                 type="text"
-                value={newMemoInput}
-                onChange={e => setNewMemoInput(e.target.value)}
+                value={noteInput}
+                onChange={e => setNoteInput(e.target.value)}
                 placeholder="在此輸入臨時文字資訊、日語句子或飯店地址..."
                 className="flex-1 p-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none text-[13px] text-stone-800 focus:border-amber-500"
               />
@@ -688,20 +687,19 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
               </button>
             </form>
 
-            {/* 備忘清單卡片 (字體微縮小2號，換行防破版) */}
             <div className="space-y-2 max-h-60 overflow-y-auto menu-scrollbar pr-1">
-              {homeMemos.length === 0 ? (
+              {stickyNotes.length === 0 ? (
                 <div className="text-center py-4 text-stone-300 text-xs font-bold">
-                  尚無備忘紀錄，快在上方新增隨手筆記吧！
+                  尚無便條紙紀錄，快在上方新增隨手筆記吧！
                 </div>
-              ) : homeMemos.map(memo => (
-                <div key={memo.id} className="p-3 bg-amber-50/50 rounded-xl border border-amber-100 flex items-start justify-between gap-3">
+              ) : stickyNotes.map(note => (
+                <div key={note.id} className="p-3 bg-amber-50/50 rounded-xl border border-amber-100 flex items-start justify-between gap-3">
                   <p className="flex-1 text-[13px] leading-relaxed text-stone-800 font-sans whitespace-pre-wrap break-words">
-                    {memo.content}
+                    {note.content}
                   </p>
                   <button
                     type="button"
-                    onClick={() => deleteDoc(doc(db, 'trips', tripId, 'home_memos', memo.id))}
+                    onClick={() => deleteDoc(doc(db, 'trips', tripId, 'sticky_notes', note.id))}
                     className="text-stone-300 hover:text-red-500 p-1 transition flex-shrink-0"
                     title="刪除"
                   >
@@ -1841,7 +1839,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 旅遊工具箱 (實用日語會話手冊) ---
+// --- 視圖組件: 旅遊工具箱 ---
 function ToolsView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">

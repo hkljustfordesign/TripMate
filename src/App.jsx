@@ -711,6 +711,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
 
               return (
                 <div key={item.id} className="relative ml-10">
+                  {/* 日期標題 ＋ 天氣資訊串接 */}
                   {isFirstItemOfDay && (
                     <div className="mb-3.5 -ml-8 flex items-center gap-2 z-20 relative flex-wrap">
                       <div className="bg-emerald-800 text-white font-mono font-bold text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-emerald-700">
@@ -797,6 +798,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                       </div>
                     )}
 
+                    {/* 快速出示憑證截圖 */}
                     {item.attachment && (
                       <div className="mt-2.5">
                         <button
@@ -886,86 +888,6 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
           })}
         </div>
       </section>
-    </div>
-  );
-}
-
-function PackingListView({ tripId, items }) {
-  const [newItem, setNewItem] = useState('');
-  const handleAdd = async (e) => {
-    e.preventDefault(); if (!newItem.trim()) return;
-    await addDoc(collection(db, 'trips', tripId, 'packing'), { item: newItem.trim(), completed: false, createdAt: serverTimestamp() });
-    setNewItem('');
-  };
-  return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-end mb-4">
-        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Luggage className="text-emerald-600" size={32}/> 行李清單</h2>
-      </div>
-      <form onSubmit={handleAdd} className="flex gap-2 bg-white p-2 rounded-2xl border border-stone-100 shadow-sm">
-        <input type="text" value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="新增行李..." className="flex-1 p-3 bg-stone-50 rounded-xl outline-none" />
-        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl"><Plus size={24}/></button>
-      </form>
-      <div className="space-y-3">
-        {items.map((item) => (
-          <div key={item.id} className="flex items-center bg-white p-4 rounded-xl border border-stone-100 shadow-sm cursor-pointer" onClick={() => updateDoc(doc(db, 'trips', tripId, 'packing', item.id), { completed: !item.completed })}>
-            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>{item.completed && <CheckCircle2 size={16} className="text-white"/>}</div>
-            <span className={`flex-1 text-lg font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.item}</span>
-            <button type="button" onClick={(e) => { e.stopPropagation(); deleteDoc(doc(db, 'trips', tripId, 'packing', item.id)); }} className="text-stone-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TodoListView({ tripId, items }) {
-  const [newItem, setNewItem] = useState('');
-
-  const handleAddTodo = async (e) => {
-    e.preventDefault(); if (!newItem.trim()) return;
-    await addDoc(collection(db, 'trips', tripId, 'todo'), { task: newItem.trim(), completed: false, createdAt: serverTimestamp() });
-    setNewItem('');
-  };
-
-  return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3">
-        <ClipboardList className="text-emerald-600" size={32}/> 代辦事項
-      </h2>
-      <form onSubmit={handleAddTodo} className="flex gap-2 bg-white p-2 rounded-2xl border border-stone-100 shadow-sm">
-        <input 
-          type="text" 
-          value={newItem} 
-          onChange={(e) => setNewItem(e.target.value)} 
-          placeholder="新增一般代辦事項 (例如: 買網卡、換日幣)..." 
-          className="flex-1 p-3 bg-stone-50 rounded-xl outline-none text-sm" 
-        />
-        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-700 transition">
-          <Plus size={22}/>
-        </button>
-      </form>
-      <div className="space-y-3">
-        {items.map((item) => (
-          <div 
-            key={item.id} 
-            className="bg-white p-4 rounded-xl border border-stone-100 flex items-center shadow-sm cursor-pointer hover:bg-stone-50 transition" 
-            onClick={() => updateDoc(doc(db, 'trips', tripId, 'todo', item.id), { completed: !item.completed })}
-          >
-            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>
-              {item.completed && <CheckCircle2 size={16} className="text-white"/>}
-            </div>
-            <span className={`flex-1 text-base font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.task}</span>
-            <button 
-              type="button" 
-              onClick={(e) => { e.stopPropagation(); deleteDoc(doc(db, 'trips', tripId, 'todo', item.id)); }} 
-              className="text-stone-300 hover:text-red-500 p-2"
-            >
-              <Trash2 size={18}/>
-            </button>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -2365,7 +2287,7 @@ function AddExpenseModal({ tripId, initialData, members, onClose }) {
                 <input type="number" min="1" className={inputStyle} value={numPeople} onChange={(e) => setNumPeople(Number(e.target.value))}/><div className="mt-2 text-right text-sm font-bold text-emerald-600">每人應付約 {f.currency} {f.amount && numPeople ? Math.round(f.amount / numPeople).toLocaleString() : 0}</div></div>
             ) : (
               <div className="space-y-3">
-                <div className="flex justify-between items-center"><label className="block text-xs font-bold text-emerald-800 ml-1">分攤名單</label><button type="button" onClick={() => handleAddPerson()} className="text-emerald-600 text-xs font-bold">+ 新增成員</button></div>
+                <div className="flex justify-between items-center"><label className="block text-xs font-bold text-emerald-800 ml-1">分攤名單</label><button type="button" onClick={() => handleAddPerson()} className="text-emerald-600 text-[10px] font-bold">+ 新增成員</button></div>
                 <div className="space-y-2 max-h-40 overflow-y-auto">{manualSplits.map((s, i) => (<div key={i} className="flex gap-2">{members.length > 0 ? (<select className="w-1/2 p-2 bg-white border rounded-lg text-sm" value={s.name} onChange={(e) => updateManualSplit(i, 'name', e.target.value)}><option value="">選擇成員</option>{members.map((m) => (<option key={m.id} value={m.name}>{m.name}</option>))}</select>) : (<input type="text" placeholder="人名" className="w-1/2 p-2 bg-white border rounded-lg text-sm" value={s.name} onChange={(e) => updateManualSplit(i, 'name', e.target.value)}/>)}<input type="number" placeholder="金額" className="w-1/3 p-2 bg-white border rounded-lg text-sm font-mono" value={s.amount} onChange={(e) => updateManualSplit(i, 'amount', e.target.value)}/><button type="button" onClick={() => handleRemovePerson(i)} className="text-stone-300 hover:text-red-500"><UserMinus size={16}/></button></div>))}</div>
               </div>
             )}

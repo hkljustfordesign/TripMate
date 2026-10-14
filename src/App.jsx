@@ -10,8 +10,7 @@ import {
   Briefcase, Gamepad2, Smile, Home, Armchair,
   UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil, Tag, StickyNote,
   Calculator, UserCheck, ArrowRight, Hourglass, ChevronDown, ChevronUp, Radio,
-  CloudSun, CloudRain, Sun, Cloud, QrCode, ArrowUp, ArrowDown, ExternalLink, Umbrella,
-  Pin
+  ArrowUp, ArrowDown
 } from 'lucide-react';
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
@@ -46,7 +45,7 @@ const calculateDuration = (start, end) => {
   if (!start || !end) return null;
   const startDate = new Date(start);
   const endDate = new Date(end);
-  const diffMs = endDate - startDate;
+  const diffMs = endDate.getTime() - startDate.getTime();
   if (isNaN(diffMs) || diffMs <= 0) return null;
   const diffMins = Math.floor(diffMs / (1000 * 60));
   const hours = Math.floor(diffMins / 60);
@@ -280,7 +279,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
         </div>
       </main>
 
-      {/* 滿版條碼/憑證預覽 */}
+      {/* 滿版憑證彈窗 */}
       {previewAttachment && (
         <AttachmentModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
       )}
@@ -290,7 +289,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
   );
 }
 
-// --- 滿版條碼與憑證檢視彈窗 ---
+// --- 滿版憑證檢視彈窗 ---
 function AttachmentModal({ attachment, onClose }) {
   const isImage = (attachment || '').startsWith('data:image') || /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(attachment || '');
 
@@ -305,11 +304,9 @@ function AttachmentModal({ attachment, onClose }) {
         </button>
 
         <div className="w-full text-center mb-4">
-          <div className="inline-flex p-3 bg-emerald-50 text-emerald-600 rounded-2xl mb-2">
-            <QrCode size={32} />
-          </div>
+          <span className="text-3xl block mb-1">🎫</span>
           <h3 className="font-bold text-lg text-stone-800">重要票券 / 憑證掃描</h3>
-          <p className="text-xs text-stone-400">請直接將此畫面出示給工作人員掃描</p>
+          <p className="text-xs text-stone-400">請直接出示給工作人員掃描</p>
         </div>
 
         <div className="flex-1 w-full flex items-center justify-center bg-stone-50 rounded-2xl overflow-hidden p-2 border border-stone-200">
@@ -317,7 +314,7 @@ function AttachmentModal({ attachment, onClose }) {
             <img src={attachment} alt="憑證截圖" className="max-h-[60vh] max-w-full object-contain rounded-xl shadow-sm" />
           ) : (
             <div className="text-center p-6 space-y-3">
-              <ExternalLink size={40} className="text-blue-500 mx-auto" />
+              <span className="text-4xl block text-blue-500">📄</span>
               <p className="text-sm font-bold text-stone-700">外部文件憑證 (PDF / 雲端硬碟)</p>
               <a 
                 href={attachment} 
@@ -391,13 +388,14 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
   }, [items]);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchWeather = async () => {
       try {
         const lat = 33.5904; 
         const lon = 130.4017;
         const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto`);
         const data = await res.json();
-        if (data && data.daily) {
+        if (isMounted && data && data.daily) {
           const map = {};
           data.daily.time.forEach((dateStr, idx) => {
             map[dateStr] = {
@@ -410,23 +408,24 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
           setWeatherData(map);
         }
       } catch (e) {
-        console.warn("無法取得天氣資訊", e);
+        console.warn("無法取得氣象資訊", e);
       }
     };
     fetchWeather();
+    return () => { isMounted = false; };
   }, []);
 
   const getWeatherDisplay = (dateStr) => {
     const w = weatherData[dateStr];
     if (!w) return null;
-    let WeatherIcon = Sun;
-    if (w.code >= 51 || w.rainProb > 40) WeatherIcon = CloudRain;
-    else if (w.code >= 1 && w.code <= 3) WeatherIcon = CloudSun;
-    else if (w.code > 3) WeatherIcon = Cloud;
+    let iconStr = "☀️";
+    if (w.code >= 51 || w.rainProb > 40) iconStr = "🌧️";
+    else if (w.code >= 1 && w.code <= 3) iconStr = "⛅";
+    else if (w.code > 3) iconStr = "☁️";
 
     return (
-      <span className="bg-emerald-950/60 text-emerald-200 border border-emerald-600/30 px-2.5 py-0.5 rounded-full text-[11px] font-mono flex items-center gap-1.5 shadow-sm">
-        <WeatherIcon size={12} className={w.rainProb > 40 ? "text-cyan-300 animate-bounce" : "text-amber-300"} />
+      <span className="bg-emerald-950/60 text-emerald-200 border border-emerald-600/30 px-2.5 py-0.5 rounded-full text-[11px] font-mono flex items-center gap-1 shadow-sm">
+        <span>{iconStr}</span>
         <span>{w.minTemp}°~{w.maxTemp}°C</span>
         {w.rainProb > 0 && <span className="text-cyan-200">💧{w.rainProb}%</span>}
       </span>
@@ -751,7 +750,7 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
                           onClick={() => onPreviewAttachment && onPreviewAttachment(item.attachment)}
                           className="px-3 py-1.5 bg-emerald-100/80 hover:bg-emerald-200 text-emerald-900 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
                         >
-                          <QrCode size={14}/> 快速出示憑證／條碼
+                          <span>🎫</span> 快速出示憑證／條碼
                         </button>
                       </div>
                     )}
@@ -922,8 +921,8 @@ function TodoListView({ tripId, items }) {
       <section className="bg-gradient-to-br from-amber-50 to-orange-50/60 p-5 rounded-[28px] border border-amber-200/80 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="p-2 bg-amber-500 text-white rounded-xl shadow-sm">
-              <Pin size={18}/>
+            <span className="p-2 bg-amber-500 text-white rounded-xl shadow-sm text-sm">
+              📌
             </span>
             <div>
               <h3 className="font-bold text-amber-950 text-base">隨手便利貼 & 文字草稿</h3>
@@ -951,7 +950,7 @@ function TodoListView({ tripId, items }) {
                 onChange={e => setNewStickyPin(e.target.checked)}
                 className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 accent-amber-500"
               />
-              <Pin size={13} className={newStickyPin ? "text-amber-600" : "text-stone-400"}/>
+              <span className="text-sm">📌</span>
               <span>設為重要置頂</span>
             </label>
             <button 
@@ -982,7 +981,7 @@ function TodoListView({ tripId, items }) {
                   <div className="flex items-center gap-1.5">
                     {note.pinned && (
                       <span className="text-[10px] bg-amber-500 text-white font-black px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
-                        <Pin size={10}/> 置頂
+                        📌 置頂
                       </span>
                     )}
                     <span className="text-[10px] text-stone-400 font-mono">
@@ -993,10 +992,10 @@ function TodoListView({ tripId, items }) {
                     <button
                       type="button"
                       onClick={() => handleTogglePin(note)}
-                      className={`p-1 rounded-lg transition ${note.pinned ? "text-amber-700 hover:bg-amber-200" : "text-stone-300 hover:text-stone-600"}`}
+                      className={`p-1 rounded-lg transition text-xs font-bold ${note.pinned ? "text-amber-800 bg-amber-200" : "text-stone-400 hover:text-stone-600"}`}
                       title={note.pinned ? "取消置頂" : "置頂"}
                     >
-                      <Pin size={14}/>
+                      📌
                     </button>
                     <button
                       type="button"
@@ -1149,8 +1148,8 @@ function ItineraryView({ tripId, items }) {
       <div className="bg-gradient-to-r from-teal-50 to-emerald-50 rounded-2xl border border-teal-200/80 p-4 shadow-sm">
         <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowPool(!showPool)}>
           <div className="flex items-center gap-2">
-            <span className="p-2 bg-teal-500 text-white rounded-xl shadow-sm">
-              <Umbrella size={18} />
+            <span className="p-2 bg-teal-500 text-white rounded-xl shadow-sm text-sm">
+              ☔
             </span>
             <div>
               <h4 className="font-bold text-teal-950 text-sm">雨天備案與彈性備選庫</h4>
@@ -1537,6 +1536,162 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
   ); 
 }
 
+// --- 視圖組件: 交通情報 ---
+function TransportView({ tripId, items, onPreviewAttachment }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const tItems = items.filter(i=>['flight','train','bus','ship'].includes(i.type));
+
+  const handleOpenEdit = (item) => {
+    setEditingItem(item);
+    setShowAdd(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowAdd(false);
+    setEditingItem(null);
+  };
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Train className="text-emerald-600" size={32}/> 交通情報</h2>
+        <button onClick={()=>{ setEditingItem(null); setShowAdd(true); }} className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg"><Plus size={20}/> 新增票券</button>
+      </div>
+      <div className="grid gap-4">
+        {tItems.map(item=>(
+          <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex justify-between items-center">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold text-blue-600 uppercase px-2 py-0.5 bg-blue-50 rounded-full">{item.type}</span>
+                {item.seat && <span className="text-xs font-bold text-emerald-600 px-2 py-0.5 bg-emerald-50 rounded-full flex items-center gap-1"><Armchair size={12}/> 座位: {item.seat}</span>}
+              </div>
+              <div className="font-bold text-lg text-stone-800">{item.title}</div>
+              <div className="text-sm font-bold text-stone-700 mt-1 flex items-center gap-1"><ArrowRightLeft size={14} className="text-stone-400"/> {item.originDest}</div>
+              <div className="text-xs text-stone-400 mt-2 flex items-center gap-1"><Clock size={12}/> {item.datetime ? item.datetime.replace('T', ' ') : ''}</div>
+              
+              {item.attachment && (
+                <button
+                  onClick={() => onPreviewAttachment && onPreviewAttachment(item.attachment)}
+                  className="mt-3 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                >
+                  <span>🎫</span> 滿版出示車票／登機證
+                </button>
+              )}
+            </div>
+            <div className="flex flex-col items-center gap-1 ml-4">
+              <button onClick={()=>handleOpenEdit(item)} className="text-stone-400 hover:text-blue-600 p-2 transition-colors" title="編輯票券">
+                <Pencil size={18} />
+              </button>
+              <button onClick={()=>deleteDoc(doc(db, 'trips', tripId, 'items', item.id))} className="text-stone-200 hover:text-red-500 transition-colors p-2" title="刪除票券">
+                <Trash2 size={18} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {showAdd && <AddTransportModal tripId={tripId} initialData={editingItem} onClose={handleCloseModal} />}
+    </div>
+  );
+}
+
+// --- 彈窗組件: 新增/編輯交通票券 ---
+function AddTransportModal({ tripId, initialData, onClose }) { 
+  const [f, setF] = useState({ 
+    title: initialData?.title || '', 
+    datetime: initialData?.datetime || '', 
+    type: initialData?.type || 'flight', 
+    originDest: initialData?.originDest || '', 
+    seat: initialData?.seat || '',
+    attachment: initialData?.attachment || ''
+  }); 
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      setUploading(true);
+      const base64 = await compressImageToBase64(file);
+      setF(prev => ({ ...prev, attachment: base64 }));
+    } catch (err) {
+      alert("圖片讀取失敗，請重試");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const sub = async (e) => { 
+    e.preventDefault(); 
+    if (initialData?.id) {
+      await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
+    } else {
+      await addDoc(collection(db, 'trips', tripId, 'items'), { ...f, createdAt: serverTimestamp() });
+    }
+    onClose(); 
+  }; 
+
+  const inputClass = "w-full p-3 bg-stone-50 border border-stone-100 rounded-xl outline-none focus:border-blue-500 transition-colors";
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl max-h-[92vh] overflow-y-auto menu-scrollbar">
+        <h3 className="font-bold text-xl mb-4 text-blue-900 flex items-center gap-2">
+          <Train size={24}/> {initialData ? '編輯交通票券' : '新增交通票券'}
+        </h3>
+        <form onSubmit={sub} className="space-y-4">
+          <select className={inputClass} value={f.type} onChange={e=>setF({...f, type:e.target.value})}>
+            <option value="flight">機票 (Flight)</option>
+            <option value="train">火車票 (Train)</option>
+            <option value="bus">巴士券 (Bus)</option>
+            <option value="ship">船票 (Ship)</option>
+          </select>
+          <input type="datetime-local" className={inputClass} value={f.datetime} onChange={e=>setF({...f, datetime:e.target.value})} required />
+          <input className={inputClass} placeholder="班次名稱" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required />
+          <div className="grid grid-cols-2 gap-3">
+            <input className={inputClass} placeholder="起訖點 (例: 台北 ➜ 高雄)" value={f.originDest} onChange={e=>setF({...f, originDest:e.target.value})} required />
+            <input className={inputClass} placeholder="座位 (例: 8車12A)" value={f.seat} onChange={e=>setF({...f, seat:e.target.value})} />
+          </div>
+
+          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200">
+            <label className="block text-xs font-bold text-stone-700 mb-2 flex items-center gap-1.5">
+              <span>🎫</span> 票券憑證截圖／QR Code (支援離線出示)
+            </label>
+            <div className="space-y-2">
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleFileUpload} 
+                className="text-xs text-stone-500 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+              />
+              <input 
+                type="text" 
+                placeholder="或直接貼上 Google Drive / PDF 網址" 
+                value={(f.attachment || '').startsWith('data:image') ? '' : f.attachment} 
+                onChange={e=>setF({...f, attachment: e.target.value})}
+                className="w-full p-2 bg-white border border-stone-200 rounded-lg text-xs"
+              />
+              {uploading && <p className="text-xs text-blue-500 font-bold">圖片最佳化中...</p>}
+              {f.attachment && (
+                <div className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                  <CheckCircle2 size={12}/> 已成功附加憑證文件
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600">取消</button>
+            <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg">
+              {initialData ? '更新票券' : '確認新增'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  ); 
+}
+
 // --- 視圖組件: 住宿登錄 ---
 function AccommodationView({ tripId, items, onPreviewAttachment }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -1580,7 +1735,7 @@ function AccommodationView({ tripId, items, onPreviewAttachment }) {
                 onClick={() => onPreviewAttachment && onPreviewAttachment(i.attachment)}
                 className="mt-3 px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
               >
-                <QrCode size={14}/> 快速出示訂房憑證 / QR Code
+                <span>🎫</span> 快速出示訂房憑證 / QR Code
               </button>
             )}
           </div>
@@ -1696,7 +1851,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
 
           <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200">
             <label className="block text-xs font-bold text-stone-700 mb-2 flex items-center gap-1.5">
-              <QrCode size={14} className="text-emerald-600"/> 訂房憑證截圖／Agoda/Booking 代碼 (支援離線出示)
+              <span>🎫</span> 訂房憑證截圖／Agoda/Booking 代碼 (支援離線出示)
             </label>
             <div className="space-y-2">
               <input 
@@ -1733,7 +1888,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 旅遊工具箱 ---
+// --- 視圖組件: 旅遊工具箱 (實用日語會話手冊) ---
 function ToolsView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">
@@ -1803,7 +1958,7 @@ function JapanesePhrases() {
         "カーナビを英語か中国語にできますか (導航能換成中文或英文嗎？)",
         "レギュラー満タンでお願いします (請加滿 Regular 一般汽油)",
         "軽油を満タンでお願いします (請加滿柴油)",
-        "タイヤの空氣壓を點検してください (請幫我檢查胎壓)",
+        "タイヤの空気圧を點検してください (請幫我檢查胎壓)",
         "窓を拭いてもらえますか (可以幫忙擦一下車窗嗎？)",
         "ゴミを捨ててもらえますか (可以幫我倒一下垃圾嗎？)",
         "◯◯はどこですか (請問◯◯在哪裡？)",

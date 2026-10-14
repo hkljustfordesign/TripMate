@@ -657,6 +657,7 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
 
               return (
                 <div key={item.id} className="relative ml-10">
+                  {/* 日期標題 ＋ 天氣資訊串接 */}
                   {isFirstItemOfDay && (
                     <div className="mb-3.5 -ml-8 flex items-center gap-2 z-20 relative flex-wrap">
                       <div className="bg-emerald-800 text-white font-mono font-bold text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-emerald-700">
@@ -671,7 +672,7 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
                   )}
 
                   <div className={`absolute -left-[42px] top-4 w-5 h-5 rounded-full border-4 border-white shadow-sm z-10 ${
-                    isMemo ? 'bg-amber-500' : isTransport ? 'bg-blue-500' : isAccommodation ? 'bg-indigo-500' : isRestaurant ? 'bg-orange-500' : 'bg-emerald-500'
+                    isMemo ? 'bg-amber-50/70' : isTransport ? 'bg-blue-500' : isAccommodation ? 'bg-indigo-500' : isRestaurant ? 'bg-orange-500' : 'bg-emerald-500'
                   }`}></div>
                   <div className={`p-5 rounded-2xl shadow-sm border transition-all ${
                     isMemo ? 'bg-amber-50/70 border-amber-200' : 
@@ -1782,7 +1783,8 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
     }
   };
 
-  const sub = async (e) => { 
+  const sub = async (e) => 
+  { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1953,7 +1955,7 @@ function JapanesePhrases() {
       icon: <Fuel size={18} className="text-blue-600"/>,
       phrases: [
         "レンタカーの予約をしています (我有預約租車)",
-        "国際免許証はこちらです (這是我的國際駕照)",
+        "國際免許証はこちらです (這是我的國際駕照)",
         "ETCカードをレンタルしたいです (我想租借ETC卡)",
         "カーナビを英語か中国語にできますか (導航能換成中文或英文嗎？)",
         "レギュラー満タンでお願いします (請加滿 Regular 一般汽油)",

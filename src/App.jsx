@@ -3,7 +3,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, collection, onSnapshot, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { 
-  MapPin, Calendar, Clock, CreditCard, Users, Plus, Trash2, Plane, Train, 
+  MapPin, Calendar, Clock, Users, Plus, Trash2, Plane, Train, 
   ArrowRightLeft, Navigation, Utensils, CheckCircle2, 
   Palmtree, Wallet, Settings, ChevronRight, BedDouble, Menu, X, 
   Luggage, ClipboardList, Heart, Volume2, Coffee, 
@@ -23,12 +23,10 @@ const firebaseConfig = {
   appId: "1:1051971323186:web:c6596264c4de9fe9ad032b"
 };
 
-// 初始化 Firebase
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 貨幣自動辨識
 const detectCurrency = (id) => {
   const text = (id || "").toLowerCase();
   if (/japan|tokyo|osaka|kyoto|okinawa|hokkaido|fukuoka|nrt|hnd|kix|fuk|日本|東京|大阪|京都|沖繩|北海道|福岡|九州/.test(text)) return 'JPY';
@@ -40,7 +38,6 @@ const detectCurrency = (id) => {
   return 'TWD'; 
 };
 
-// 計算停留時間
 const calculateDuration = (start, end) => {
   if (!start || !end) return null;
   const startDate = new Date(start);
@@ -55,7 +52,6 @@ const calculateDuration = (start, end) => {
   return `${mins}分鐘`;
 };
 
-// 標準排序時間
 const getItemSortTime = (item) => {
   if (!item) return '9999-99-99T99:99';
   if (item.datetime) return item.datetime;
@@ -68,7 +64,6 @@ const getItemSortTime = (item) => {
   return '9999-99-99T99:99';
 };
 
-// 圖片壓縮為 Base64
 const compressImageToBase64 = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -135,7 +130,7 @@ export default function App() {
 
   if (!user) return (
     <div className="min-h-screen flex items-center justify-center bg-stone-50 font-serif">
-      <div className="animate-pulse text-emerald-600 font-bold text-xl flex items-center gap-2">
+      <div className="text-emerald-600 font-bold text-xl flex items-center gap-2">
         <Palmtree size={24} /> 正在載入旅伴 TripMate...
       </div>
     </div>
@@ -146,7 +141,6 @@ export default function App() {
   return <TripDashboard tripId={tripId} userId={user.uid} onLeave={handleLeave} />;
 }
 
-// --- 入口頁面 ---
 function Onboarding({ onJoin, initialId }) {
   const [input, setInput] = useState(initialId);
   return (
@@ -165,7 +159,7 @@ function Onboarding({ onJoin, initialId }) {
             <MonitorSmartphone size={16}/> 如何跨裝置連動？
           </h3>
           <p className="text-xs text-emerald-700 leading-relaxed">
-            只要在不同手機或電腦輸入<span className="font-bold underline">完全相同</span>的「旅遊代碼」，
+            只要在不同手機或電腦輸入完全相同的「旅遊代碼」，
             所有行程、記帳與清單都會即時同步顯示！
           </p>
         </div>
@@ -188,7 +182,6 @@ function Onboarding({ onJoin, initialId }) {
   );
 }
 
-// --- 主要儀表板 ---
 function TripDashboard({ tripId, userId, onLeave }) {
   const [activeTab, setActiveTab] = useState('home');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -257,7 +250,6 @@ function TripDashboard({ tripId, userId, onLeave }) {
         </div>
       </main>
 
-      {/* 滿版憑證彈窗 */}
       {previewAttachment && (
         <AttachmentModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
       )}
@@ -267,7 +259,6 @@ function TripDashboard({ tripId, userId, onLeave }) {
   );
 }
 
-// --- 滿版憑證檢視彈窗 ---
 function AttachmentModal({ attachment, onClose }) {
   const isImage = (attachment || '').startsWith('data:image') || /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(attachment || '');
 
@@ -352,7 +343,6 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (包含置頂「便條紙」手風琴折疊盒) ---
 function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
   const [openCategory, setOpenCategory] = useState('吃');
   const [weatherData, setWeatherData] = useState({});
@@ -623,7 +613,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
         </section>
       )}
 
-      {/* 2. 首頁「便條紙」手風琴折疊盒 (位置在即時動態與時間軸正中間) */}
+      {/* 2. 首頁「便條紙」手風琴折疊盒 */}
       <section className="bg-white rounded-2xl shadow-sm border border-amber-200 overflow-hidden">
         <button
           type="button"
@@ -633,7 +623,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
           <div className="flex items-center gap-2">
             <span className="text-base">📝</span>
             <span className="font-bold text-amber-950 text-base">便條紙</span>
-            <span className="bg-white text-amber-900 text-xs font-bold px-2 py-0.5 rounded-full border border-amber-200">
+            <span className="bg-white text-amber-900 text-xs font-bold px-2.5 py-0.5 rounded-full border border-amber-200">
               {stickyNotes.length}
             </span>
             <span className="text-xs text-amber-700 hidden sm:inline">（點擊展開／收合，隨手記文字資訊）</span>
@@ -719,7 +709,6 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
 
               return (
                 <div key={item.id} className="relative ml-10">
-                  {/* 日期標題 ＋ 天氣資訊串接 */}
                   {isFirstItemOfDay && (
                     <div className="mb-3.5 -ml-8 flex items-center gap-2 z-20 relative flex-wrap">
                       <div className="bg-emerald-800 text-white font-mono font-bold text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-emerald-700">
@@ -806,7 +795,6 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                       </div>
                     )}
 
-                    {/* 快速出示憑證截圖 */}
                     {item.attachment && (
                       <div className="mt-2.5">
                         <button
@@ -900,7 +888,6 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
   );
 }
 
-// --- 視圖組件: 行李清單 ---
 function PackingListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
   const handleAdd = async (e) => {
@@ -930,7 +917,6 @@ function PackingListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 代辦事項 ---
 function TodoListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
 
@@ -964,7 +950,9 @@ function TodoListView({ tripId, items }) {
             className="bg-white p-4 rounded-xl border border-stone-100 flex items-center shadow-sm cursor-pointer hover:bg-stone-50 transition" 
             onClick={() => updateDoc(doc(db, 'trips', tripId, 'todo', item.id), { completed: !item.completed })}
           >
-            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>{item.completed && <CheckCircle2 size={16} className="text-white"/>}</div>
+            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>
+              {item.completed && <CheckCircle2 size={16} className="text-white"/>}
+            </div>
             <span className={`flex-1 text-base font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.task}</span>
             <button 
               type="button" 
@@ -980,7 +968,6 @@ function TodoListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 行程規劃 (雨天備案庫與上下排序) ---
 function ItineraryView({ tripId, items }) {
   const [showAddItinerary, setShowAddItinerary] = useState(false);
   const [showAddMemo, setShowAddMemo] = useState(false);
@@ -1066,7 +1053,6 @@ function ItineraryView({ tripId, items }) {
         </div>
       </div>
 
-      {/* 雨天備案與備選庫 */}
       <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-4 shadow-sm">
         <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowPool(!showPool)}>
           <div className="flex items-center gap-2">
@@ -1232,10 +1218,9 @@ function ItineraryView({ tripId, items }) {
                     <span>
                       {item.datetime.replace('T', ' ')}
                       {item.endDatetime && (
-                        <span className="text-stone-500 font-medium"> ➜ {item.endDatetime.includes('T') ? item.endDatetime.split('T')[1] : item.endDatetime}</span>
-                      )}
-                    </span>
-                  ) : '未定時間'}
+                        <span className="text-stone-500 font-medium"> ➜ {item.endDatetime.includes('T') ? item.endDatetime.split('T')[1] : item.endDatetime}`}
+                      </span>
+                    ) : '未定時間'}
                 </div>
                 {!isMemo && item.location && (
                   <div className="text-sm text-stone-500 mt-1 flex items-center gap-1">
@@ -1268,14 +1253,14 @@ function ItineraryView({ tripId, items }) {
                   className={`p-1.5 transition-colors ${isMemo ? 'text-amber-600 hover:text-amber-800' : isRestaurant ? 'text-orange-600 hover:text-orange-800' : 'text-stone-400 hover:text-emerald-600'}`} 
                   title="編輯"
                 >
-                  <Pencil size={18} />
+                  <Pencil size={16} />
                 </button>
                 <button 
                   onClick={() => deleteDoc(doc(db, 'trips', tripId, 'items', item.id))} 
                   className="text-stone-300 hover:text-red-500 p-1.5 transition-colors" 
                   title="刪除"
                 >
-                  <Trash2 size={18} />
+                  <Trash2 size={16} />
                 </button>
               </div>
             </div>
@@ -1289,7 +1274,6 @@ function ItineraryView({ tripId, items }) {
   );
 }
 
-// --- 彈窗組件: 新增/編輯 備忘錄 ---
 function AddMemoModal({ tripId, initialData, onClose }) {
   const [f, setF] = useState({ 
     title: initialData?.title || '', 
@@ -1297,7 +1281,8 @@ function AddMemoModal({ tripId, initialData, onClose }) {
     type: 'memo' 
   }); 
 
-  const sub = async (e) => { 
+  const sub = async (e) => 
+  { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1350,7 +1335,6 @@ function AddMemoModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 彈窗組件: 新增/編輯行程規劃 ---
 function AddItineraryModal({ tripId, initialData, onClose }) { 
   const [sightName, setSightName] = useState(initialData?.type !== 'res' ? (initialData?.title || '') : '');
   const [restaurantName, setRestaurantName] = useState(initialData?.type === 'res' ? (initialData?.title || '') : '');
@@ -1457,7 +1441,6 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 交通情報 ---
 function TransportView({ tripId, items, onPreviewAttachment }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -1516,7 +1499,6 @@ function TransportView({ tripId, items, onPreviewAttachment }) {
   );
 }
 
-// --- 彈窗組件: 新增/編輯交通票券 ---
 function AddTransportModal({ tripId, initialData, onClose }) { 
   const [f, setF] = useState({ 
     title: initialData?.title || '', 
@@ -1613,7 +1595,6 @@ function AddTransportModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 住宿登錄 ---
 function AccommodationView({ tripId, items, onPreviewAttachment }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -1675,7 +1656,6 @@ function AccommodationView({ tripId, items, onPreviewAttachment }) {
   );
 }
 
-// --- 唯一且標準的住宿彈窗 ---
 function AddAccommodationModal({ tripId, initialData, onClose }) { 
   const [f, setF] = useState({ 
     title: initialData?.title || '', 
@@ -1703,7 +1683,8 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
     }
   };
 
-  const sub = async (e) => { 
+  const sub = async (e) => 
+  { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1809,7 +1790,6 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 旅遊工具箱 ---
 function ToolsView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">
@@ -1828,7 +1808,6 @@ function ToolsView() {
   );
 }
 
-// --- 子組件: 日語實用會話 ---
 function JapanesePhrases() {
   const categories = { 
     "招呼 👋": {
@@ -1997,7 +1976,6 @@ function JapanesePhrases() {
   );
 }
 
-// --- 視圖組件: 記帳分帳 ---
 function ExpenseView({ tripId, expenses, members }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
@@ -2209,7 +2187,6 @@ function ExpenseView({ tripId, expenses, members }) {
   );
 }
 
-// --- 彈窗組件: 成員名單管理 ---
 function MembersManagementModal({ tripId, members, onClose }) {
   const [newMemberName, setNewMemberName] = useState('');
 
@@ -2275,7 +2252,6 @@ function MembersManagementModal({ tripId, members, onClose }) {
   );
 }
 
-// --- 彈窗組件: 新增/編輯支出 ---
 function AddExpenseModal({ tripId, initialData, members, onClose }) {
   const defaultCurrency = useMemo(() => detectCurrency(tripId), [tripId]);
   const [f, setF] = useState({

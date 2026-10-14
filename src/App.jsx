@@ -221,7 +221,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
   const [todoItems, setTodoItems] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
   const [members, setMembers] = useState([]);
-  const [previewAttachment, setPreviewAttachment] = useState(null); // 憑證全螢幕檢視狀態
+  const [previewAttachment, setPreviewAttachment] = useState(null);
 
   useEffect(() => {
     if (!tripId || !userId) return;
@@ -290,7 +290,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
   );
 }
 
-// --- 滿版條碼與憑證檢視彈窗 (支援離線展示) ---
+// --- 滿版條碼與憑證檢視彈窗 ---
 function AttachmentModal({ attachment, onClose }) {
   const isImage = (attachment || '').startsWith('data:image') || /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(attachment || '');
 
@@ -377,7 +377,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (整合每日氣象資訊串接與憑證出示) ---
+// --- 視圖組件: 首頁 ---
 function HomeView({ items, wishlistItems, onPreviewAttachment }) {
   const [openCategory, setOpenCategory] = useState('吃');
   const [weatherData, setWeatherData] = useState({});
@@ -390,7 +390,6 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
     });
   }, [items]);
 
-  // 天氣 API 串接 (Open-Meteo 免金鑰高精確氣候預報)
   useEffect(() => {
     const fetchWeather = async () => {
       try {
@@ -626,7 +625,7 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
         </section>
       )}
 
-      {/* 旅程時間軸 (含每日天氣展示) */}
+      {/* 旅程時間軸 */}
       <section>
         <h2 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3 mb-6">
           <Home className="text-emerald-600" size={32}/> 旅程時間軸
@@ -659,7 +658,6 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
 
               return (
                 <div key={item.id} className="relative ml-10">
-                  {/* 日期標題 ＋ 天氣資訊串接 */}
                   {isFirstItemOfDay && (
                     <div className="mb-3.5 -ml-8 flex items-center gap-2 z-20 relative flex-wrap">
                       <div className="bg-emerald-800 text-white font-mono font-bold text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-emerald-700">
@@ -669,7 +667,6 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
                           {dayLabel}
                         </span>
                       </div>
-                      {/* 天氣小徽章 */}
                       {getWeatherDisplay(currentDate)}
                     </div>
                   )}
@@ -871,7 +868,7 @@ function PackingListView({ tripId, items }) {
   );
 }
 
-// --- 視圖組件: 代辦事項 (內建便利貼狀態與置頂功能) ---
+// --- 視圖組件: 代辦事項 (隨手便利貼 100% 內建置頂) ---
 function TodoListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
   const [stickyNotes, setStickyNotes] = useState([]);
@@ -1379,7 +1376,8 @@ function AddMemoModal({ tripId, initialData, onClose }) {
     type: 'memo' 
   }); 
 
-  const sub = async (e) => { 
+  const sub = async (e) => 
+  { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1539,164 +1537,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 交通情報 (含 QR Code/憑證截圖快捷) ---
-function TransportView({ tripId, items, onPreviewAttachment }) {
-  const [showAdd, setShowAdd] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const tItems = items.filter(i=>['flight','train','bus','ship'].includes(i.type));
-
-  const handleOpenEdit = (item) => {
-    setEditingItem(item);
-    setShowAdd(true);
-  };
-
-  const handleCloseModal = () => {
-    setShowAdd(false);
-    setEditingItem(null);
-  };
-
-  return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Train className="text-emerald-600" size={32}/> 交通情報</h2>
-        <button onClick={()=>{ setEditingItem(null); setShowAdd(true); }} className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg"><Plus size={20}/> 新增票券</button>
-      </div>
-      <div className="grid gap-4">
-        {tItems.map(item=>(
-          <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex justify-between items-center">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-bold text-blue-600 uppercase px-2 py-0.5 bg-blue-50 rounded-full">{item.type}</span>
-                {item.seat && <span className="text-xs font-bold text-emerald-600 px-2 py-0.5 bg-emerald-50 rounded-full flex items-center gap-1"><Armchair size={12}/> 座位: {item.seat}</span>}
-              </div>
-              <div className="font-bold text-lg text-stone-800">{item.title}</div>
-              <div className="text-sm font-bold text-stone-700 mt-1 flex items-center gap-1"><ArrowRightLeft size={14} className="text-stone-400"/> {item.originDest}</div>
-              <div className="text-xs text-stone-400 mt-2 flex items-center gap-1"><Clock size={12}/> {item.datetime ? item.datetime.replace('T', ' ') : ''}</div>
-              
-              {/* 滿版憑證快捷按鈕 */}
-              {item.attachment && (
-                <button
-                  onClick={() => onPreviewAttachment && onPreviewAttachment(item.attachment)}
-                  className="mt-3 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-                >
-                  <QrCode size={14}/> 滿版出示車票／登機證
-                </button>
-              )}
-            </div>
-            <div className="flex flex-col items-center gap-1 ml-4">
-              <button onClick={()=>handleOpenEdit(item)} className="text-stone-400 hover:text-blue-600 p-2 transition-colors" title="編輯票券">
-                <Pencil size={18} />
-              </button>
-              <button onClick={()=>deleteDoc(doc(db, 'trips', tripId, 'items', item.id))} className="text-stone-200 hover:text-red-500 transition-colors p-2" title="刪除票券">
-                <Trash2 size={18} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-      {showAdd && <AddTransportModal tripId={tripId} initialData={editingItem} onClose={handleCloseModal} />}
-    </div>
-  );
-}
-
-// --- 彈窗組件: 新增/編輯交通票券 (支援附件上傳與離線快取) ---
-function AddTransportModal({ tripId, initialData, onClose }) { 
-  const [f, setF] = useState({ 
-    title: initialData?.title || '', 
-    datetime: initialData?.datetime || '', 
-    type: initialData?.type || 'flight', 
-    originDest: initialData?.originDest || '', 
-    seat: initialData?.seat || '',
-    attachment: initialData?.attachment || ''
-  }); 
-  const [uploading, setUploading] = useState(false);
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      setUploading(true);
-      const base64 = await compressImageToBase64(file);
-      setF(prev => ({ ...prev, attachment: base64 }));
-    } catch (err) {
-      alert("圖片讀取失敗，請重試");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const sub = async (e) => { 
-    e.preventDefault(); 
-    if (initialData?.id) {
-      await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
-    } else {
-      await addDoc(collection(db, 'trips', tripId, 'items'), { ...f, createdAt: serverTimestamp() });
-    }
-    onClose(); 
-  }; 
-
-  const inputClass = "w-full p-3 bg-stone-50 border border-stone-100 rounded-xl outline-none focus:border-blue-500 transition-colors";
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl max-h-[92vh] overflow-y-auto menu-scrollbar">
-        <h3 className="font-bold text-xl mb-4 text-blue-900 flex items-center gap-2">
-          <Train size={24}/> {initialData ? '編輯交通票券' : '新增交通票券'}
-        </h3>
-        <form onSubmit={sub} className="space-y-4">
-          <select className={inputClass} value={f.type} onChange={e=>setF({...f, type:e.target.value})}>
-            <option value="flight">機票 (Flight)</option>
-            <option value="train">火車票 (Train)</option>
-            <option value="bus">巴士券 (Bus)</option>
-            <option value="ship">船票 (Ship)</option>
-          </select>
-          <input type="datetime-local" className={inputClass} value={f.datetime} onChange={e=>setF({...f, datetime:e.target.value})} required />
-          <input className={inputClass} placeholder="班次名稱" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required />
-          <div className="grid grid-cols-2 gap-3">
-            <input className={inputClass} placeholder="起訖點 (例: 台北 ➜ 高雄)" value={f.originDest} onChange={e=>setF({...f, originDest:e.target.value})} required />
-            <input className={inputClass} placeholder="座位 (例: 8車12A)" value={f.seat} onChange={e=>setF({...f, seat:e.target.value})} />
-          </div>
-
-          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200">
-            <label className="block text-xs font-bold text-stone-700 mb-2 flex items-center gap-1.5">
-              <QrCode size={14} className="text-blue-600"/> 票券 QR Code／憑證截圖 (支援離線出示)
-            </label>
-            <div className="space-y-2">
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={handleFileUpload} 
-                className="text-xs text-stone-500 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
-              />
-              <input 
-                type="text" 
-                placeholder="或直接貼上 Google Drive / PDF 網址" 
-                value={(f.attachment || '').startsWith('data:image') ? '' : f.attachment} 
-                onChange={e=>setF({...f, attachment: e.target.value})}
-                className="w-full p-2 bg-white border border-stone-200 rounded-lg text-xs"
-              />
-              {uploading && <p className="text-xs text-blue-500 font-bold">圖片最佳化中...</p>}
-              {f.attachment && (
-                <div className="text-xs text-emerald-600 font-bold flex items-center gap-1">
-                  <CheckCircle2 size={12}/> 已成功附加憑證文件
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600">取消</button>
-            <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg">
-              {initialData ? '更新票券' : '確認新增'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  ); 
-}
-
-// --- 視圖組件: 住宿登錄 (含憑證出示) ---
+// --- 視圖組件: 住宿登錄 ---
 function AccommodationView({ tripId, items, onPreviewAttachment }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -1758,7 +1599,7 @@ function AccommodationView({ tripId, items, onPreviewAttachment }) {
   );
 }
 
-// --- 唯一且標準的住宿彈窗 (支援附件離線儲存) ---
+// --- 唯一且標準的住宿彈窗 ---
 function AddAccommodationModal({ tripId, initialData, onClose }) { 
   const [f, setF] = useState({ 
     title: initialData?.title || '', 
@@ -1892,7 +1733,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 旅遊工具箱 (實用日語會話手冊) ---
+// --- 視圖組件: 旅遊工具箱 ---
 function ToolsView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">
@@ -1962,7 +1803,7 @@ function JapanesePhrases() {
         "カーナビを英語か中国語にできますか (導航能換成中文或英文嗎？)",
         "レギュラー満タンでお願いします (請加滿 Regular 一般汽油)",
         "軽油を満タンでお願いします (請加滿柴油)",
-        "タイヤの空気圧を點検してください (請幫我檢查胎壓)",
+        "タイヤの空氣壓を點検してください (請幫我檢查胎壓)",
         "窓を拭いてもらえますか (可以幫忙擦一下車窗嗎？)",
         "ゴミを捨ててもらえますか (可以幫我倒一下垃圾嗎？)",
         "◯◯はどこですか (請問◯◯在哪裡？)",

@@ -424,7 +424,7 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
     else if (w.code > 3) iconStr = "☁️";
 
     return (
-      <span className="bg-emerald-950/60 text-emerald-200 border border-emerald-600/30 px-2.5 py-0.5 rounded-full text-[11px] font-mono flex items-center gap-1 shadow-sm">
+      <span className="bg-emerald-950 text-emerald-200 border border-emerald-600/30 px-2.5 py-0.5 rounded-full text-[11px] font-mono flex items-center gap-1 shadow-sm">
         <span>{iconStr}</span>
         <span>{w.minTemp}°~{w.maxTemp}°C</span>
         {w.rainProb > 0 && <span className="text-cyan-200">💧{w.rainProb}%</span>}
@@ -663,7 +663,7 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
                       <div className="bg-emerald-800 text-white font-mono font-bold text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-emerald-700">
                         <Calendar size={12} className="text-emerald-300"/>
                         <span>{currentDate}</span>
-                        <span className="bg-emerald-600/80 text-emerald-100 px-2 py-0.2 rounded-full text-[10px]">
+                        <span className="bg-emerald-600 text-emerald-100 px-2 py-0.2 rounded-full text-[10px]">
                           {dayLabel}
                         </span>
                       </div>
@@ -672,13 +672,13 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
                   )}
 
                   <div className={`absolute -left-[42px] top-4 w-5 h-5 rounded-full border-4 border-white shadow-sm z-10 ${
-                    isMemo ? 'bg-amber-50/70' : isTransport ? 'bg-blue-500' : isAccommodation ? 'bg-indigo-500' : isRestaurant ? 'bg-orange-500' : 'bg-emerald-500'
+                    isMemo ? 'bg-amber-500' : isTransport ? 'bg-blue-500' : isAccommodation ? 'bg-indigo-500' : isRestaurant ? 'bg-orange-500' : 'bg-emerald-500'
                   }`}></div>
                   <div className={`p-5 rounded-2xl shadow-sm border transition-all ${
-                    isMemo ? 'bg-amber-50/70 border-amber-200' : 
-                    isTransport ? 'bg-blue-50/40 border-blue-100' : 
-                    isAccommodation ? 'bg-indigo-50/40 border-indigo-100' : 
-                    isRestaurant ? 'bg-orange-50/40 border-orange-100' : 'bg-white border-stone-100'
+                    isMemo ? 'bg-amber-50 border-amber-200' : 
+                    isTransport ? 'bg-blue-50 border-blue-100' : 
+                    isAccommodation ? 'bg-indigo-50 border-indigo-100' : 
+                    isRestaurant ? 'bg-orange-50 border-orange-100' : 'bg-white border-stone-100'
                   }`}>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <Icon size={14} className={
@@ -730,7 +730,7 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
                     </div>
 
                     {isTransport && (
-                      <div className="mt-3 pt-2.5 border-t border-blue-100/60 flex flex-wrap gap-2 text-xs">
+                      <div className="mt-3 pt-2.5 border-t border-blue-100 flex flex-wrap gap-2 text-xs">
                         {item.originDest && (
                           <span className="bg-white text-blue-700 font-bold px-2.5 py-1 rounded-lg border border-blue-200 flex items-center gap-1">
                             <ArrowRightLeft size={12} className="text-blue-500"/> {item.originDest}
@@ -749,7 +749,7 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
                       <div className="mt-2.5">
                         <button
                           onClick={() => onPreviewAttachment && onPreviewAttachment(item.attachment)}
-                          className="px-3 py-1.5 bg-emerald-100/80 hover:bg-emerald-200 text-emerald-900 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                          className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
                         >
                           <span>🎫</span> 快速出示憑證／條碼
                         </button>
@@ -794,7 +794,7 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
                   <div className="flex items-center gap-2">
                     <span className={cat.color}>{cat.icon}</span>
                     <span className="font-bold text-stone-800 text-lg">想{cat.id}的</span>
-                    <span className="bg-white/80 text-stone-600 text-xs font-bold px-2.5 py-0.5 rounded-full ml-1">
+                    <span className="bg-white text-stone-600 text-xs font-bold px-2.5 py-0.5 rounded-full ml-1">
                       {catItems.length}
                     </span>
                   </div>
@@ -804,13 +804,13 @@ function HomeView({ items, wishlistItems, onPreviewAttachment }) {
                 </button>
 
                 {isOpen && (
-                  <div className="p-4 border-t border-stone-100/60 bg-white space-y-3 animate-in fade-in duration-200">
+                  <div className="p-4 border-t border-stone-100 bg-white space-y-3 animate-in fade-in duration-200">
                     {catItems.length === 0 ? (
                       <div className="text-center py-6 text-stone-300 text-xs font-bold">尚無願望紀錄</div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                         {catItems.map(item => (
-                          <div key={item.id} className="bg-stone-50 rounded-2xl p-3.5 border border-stone-200/60 flex flex-col justify-between hover:bg-stone-100/60 transition">
+                          <div key={item.id} className="bg-stone-50 rounded-2xl p-3.5 border border-stone-200 flex flex-col justify-between hover:bg-stone-100 transition">
                             <div>
                               <h4 className="font-bold text-stone-800 text-sm truncate mb-1">{item.name}</h4>
                               {item.note && (
@@ -919,7 +919,7 @@ function TodoListView({ tripId, items }) {
     <div className="space-y-8 max-w-4xl mx-auto">
       
       {/* 📌 隨手便利貼專區 */}
-      <section className="bg-gradient-to-br from-amber-50 to-orange-50/60 p-5 rounded-[28px] border border-amber-200/80 shadow-sm space-y-4">
+      <section className="bg-gradient-to-br from-amber-50 to-orange-50 p-5 rounded-[28px] border border-amber-200 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="p-2 bg-amber-500 text-white rounded-xl shadow-sm text-sm">
@@ -930,7 +930,7 @@ function TodoListView({ tripId, items }) {
               <p className="text-[11px] text-amber-800">方便臨時抄寫日語句子、預約編號、重要地址或即時備忘</p>
             </div>
           </div>
-          <span className="text-[11px] bg-amber-200/80 text-amber-900 font-bold px-2.5 py-0.5 rounded-full">
+          <span className="text-[11px] bg-amber-200 text-amber-900 font-bold px-2.5 py-0.5 rounded-full">
             {stickyNotes.length} 則便籤
           </span>
         </div>
@@ -973,8 +973,8 @@ function TodoListView({ tripId, items }) {
               key={note.id} 
               className={`p-3.5 rounded-2xl border transition relative flex flex-col justify-between ${
                 note.pinned 
-                  ? 'bg-amber-100/70 border-amber-300 shadow-sm' 
-                  : 'bg-white border-amber-100/80 shadow-xs'
+                  ? 'bg-amber-100 border-amber-300 shadow-sm' 
+                  : 'bg-white border-amber-100 shadow-xs'
               }`}
             >
               <div>
@@ -1146,7 +1146,7 @@ function ItineraryView({ tripId, items }) {
       </div>
 
       {/* ☔ 雨天備案與備選庫 */}
-      <div className="bg-gradient-to-r from-teal-50 to-emerald-50 rounded-2xl border border-teal-200/80 p-4 shadow-sm">
+      <div className="bg-gradient-to-r from-teal-50 to-emerald-50 rounded-2xl border border-teal-200 p-4 shadow-sm">
         <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowPool(!showPool)}>
           <div className="flex items-center gap-2">
             <span className="p-2 bg-teal-500 text-white rounded-xl shadow-sm text-sm">
@@ -1158,7 +1158,7 @@ function ItineraryView({ tripId, items }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="bg-teal-200/80 text-teal-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
+            <span className="bg-teal-200 text-teal-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
               {unscheduledPool.length} 個候補
             </span>
             {showPool ? <ChevronUp size={18} className="text-teal-700"/> : <ChevronDown size={18} className="text-teal-700"/>}
@@ -1166,9 +1166,9 @@ function ItineraryView({ tripId, items }) {
         </div>
 
         {showPool && (
-          <div className="mt-4 pt-3 border-t border-teal-200/60 space-y-2.5">
+          <div className="mt-4 pt-3 border-t border-teal-200 space-y-2.5">
             {unscheduledPool.length === 0 ? (
-              <div className="text-center py-4 text-teal-600/70 text-xs font-bold">
+              <div className="text-center py-4 text-teal-600 text-xs font-bold">
                 目前沒有備選景點。新增行程時「時間欄位留空」即可存入備選庫！
               </div>
             ) : unscheduledPool.map(poolItem => (
@@ -1230,7 +1230,7 @@ function ItineraryView({ tripId, items }) {
                 const isRestaurant = item.type === 'res';
                 return (
                   <div key={item.id} className="relative">
-                    <div className="flex items-start gap-3 p-4 bg-stone-50 rounded-2xl border border-stone-200/80">
+                    <div className="flex items-start gap-3 p-4 bg-stone-50 rounded-2xl border border-stone-200">
                       <div className={`w-7 h-7 rounded-full text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5 ${isRestaurant ? 'bg-orange-500' : 'bg-emerald-600'}`}>
                         {idx + 1}
                       </div>
@@ -1279,18 +1279,18 @@ function ItineraryView({ tripId, items }) {
             <div 
               key={item.id} 
               className={`p-5 rounded-2xl shadow-sm border flex justify-between items-center mb-3 transition-all ${
-                isMemo ? 'bg-amber-50/70 border-amber-200' : 
-                isRestaurant ? 'bg-orange-50/40 border-orange-100' : 'bg-white border-stone-100'
+                isMemo ? 'bg-amber-50 border-amber-200' : 
+                isRestaurant ? 'bg-orange-50 border-orange-100' : 'bg-white border-stone-100'
               }`}
             >
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   {isMemo ? (
-                    <span className="text-xs font-bold text-amber-700 uppercase bg-amber-100/70 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <span className="text-xs font-bold text-amber-700 uppercase bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
                       <StickyNote size={12}/> 備忘註記
                     </span>
                   ) : isRestaurant ? (
-                    <span className="text-xs font-bold text-orange-700 uppercase bg-orange-100/70 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <span className="text-xs font-bold text-orange-700 uppercase bg-orange-100 px-2 py-0.5 rounded-md flex items-center gap-1">
                       <Utensils size={12}/> RES
                     </span>
                   ) : (
@@ -1960,7 +1960,7 @@ function JapanesePhrases() {
         "カーナビを英語か中国語にできますか (導航能換成中文或英文嗎？)",
         "レギュラー満タンでお願いします (請加滿 Regular 一般汽油)",
         "軽油を満タンでお願いします (請加滿柴油)",
-        "タイヤの空気圧を點検してください (請幫我檢查胎壓)",
+        "タイヤの空氣壓を點検してください (請幫我檢查胎壓)",
         "窓を拭いてもらえますか (可以幫忙擦一下車窗嗎？)",
         "ゴミを捨ててもらえますか (可以幫我倒一下垃圾嗎？)",
         "◯◯はどこですか (請問◯◯在哪裡？)",

@@ -10,7 +10,7 @@ import {
   Briefcase, Gamepad2, Smile, Home, Armchair,
   UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil, Tag, StickyNote,
   Calculator, UserCheck, ArrowRight, Hourglass, ChevronDown, ChevronUp, Radio,
-  ArrowUp, ArrowDown, ExternalLink
+  ArrowUp, ArrowDown
 } from 'lucide-react';
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
@@ -28,7 +28,7 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- 貨幣自動辨識邏輯 ---
+// 貨幣自動辨識
 const detectCurrency = (id) => {
   const text = (id || "").toLowerCase();
   if (/japan|tokyo|osaka|kyoto|okinawa|hokkaido|fukuoka|nrt|hnd|kix|fuk|日本|東京|大阪|京都|沖繩|北海道|福岡|九州/.test(text)) return 'JPY';
@@ -40,7 +40,7 @@ const detectCurrency = (id) => {
   return 'TWD'; 
 };
 
-// --- 計算停留時間輔助函式 ---
+// 計算停留時間
 const calculateDuration = (start, end) => {
   if (!start || !end) return null;
   const startDate = new Date(start);
@@ -55,7 +55,7 @@ const calculateDuration = (start, end) => {
   return `${mins}分鐘`;
 };
 
-// --- 取得項目標準排序時間 ---
+// 標準排序時間
 const getItemSortTime = (item) => {
   if (!item) return '9999-99-99T99:99';
   if (item.datetime) return item.datetime;
@@ -68,7 +68,7 @@ const getItemSortTime = (item) => {
   return '9999-99-99T99:99';
 };
 
-// 圖片壓縮為 Base64 (支援離線展示)
+// 圖片壓縮為 Base64
 const compressImageToBase64 = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -92,18 +92,6 @@ const compressImageToBase64 = (file) => {
   });
 };
 
-const fontStyle = `
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;600;700&display=swap');
-body { font-family: 'GenRyuMin', 'Noto Serif TC', serif; touch-action: manipulation; -webkit-text-size-adjust: 100%; background-color: #F5F7F4; }
-button, a, .cursor-pointer { min-height: 44px; min-width: 44px; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
-input, select, textarea { font-size: 16px !important; }
-.menu-scrollbar { -webkit-overflow-scrolling: touch; }
-.btn-active-effect:active { transform: scale(0.95); transition: transform 0.1s; }
-.menu-scrollbar::-webkit-scrollbar { width: 6px; }
-.menu-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
-.menu-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
-`;
-
 const getGoogleMapsLink = (location) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location || '')}`;
 const getNavigationLink = (location) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location || '')}`;
 
@@ -119,16 +107,6 @@ export default function App() {
   const [isJoined, setIsJoined] = useState(Boolean(localStorage.getItem('last_trip_id')));
 
   useEffect(() => {
-    const head = document.head;
-    const metaViewport = document.createElement('meta');
-    metaViewport.name = "viewport";
-    metaViewport.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover";
-    head.appendChild(metaViewport);
-
-    const style = document.createElement('style');
-    style.innerHTML = fontStyle;
-    head.appendChild(style);
-
     const initAuth = async () => {
       try {
         await signInAnonymously(auth);
@@ -172,10 +150,10 @@ export default function App() {
 function Onboarding({ onJoin, initialId }) {
   const [input, setInput] = useState(initialId);
   return (
-    <div className="min-h-screen bg-[#E8F5E9] flex flex-col items-center justify-center p-6 relative overflow-hidden font-serif">
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl p-8 w-full max-w-md text-center relative z-10 border border-white/50">
+    <div className="min-h-screen bg-emerald-50 flex flex-col items-center justify-center p-6 relative overflow-hidden font-serif">
+      <div className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-md text-center relative z-10 border border-stone-200">
         <div className="flex justify-center mb-6">
-          <div className="bg-gradient-to-tr from-emerald-500 to-teal-400 p-5 rounded-2xl text-white shadow-lg transform -rotate-6">
+          <div className="bg-emerald-500 p-5 rounded-2xl text-white shadow-lg">
             <Plane size={56} strokeWidth={1.5} />
           </div>
         </div>
@@ -203,7 +181,7 @@ function Onboarding({ onJoin, initialId }) {
               className="w-full px-5 py-4 bg-stone-50 border-2 border-stone-100 rounded-2xl focus:border-emerald-500 outline-none text-lg font-mono font-bold tracking-wider text-emerald-900 uppercase text-center"
             />
           </div>
-          <button onClick={() => onJoin(input)} className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-bold py-4 rounded-2xl transition shadow-lg text-lg flex items-center justify-center gap-2 btn-active-effect">開始旅程 <ChevronRight size={20} /></button>
+          <button onClick={() => onJoin(input)} className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl transition shadow-lg text-lg flex items-center justify-center gap-2">開始旅程 <ChevronRight size={20} /></button>
         </div>
       </div>
     </div>
@@ -257,12 +235,12 @@ function TripDashboard({ tripId, userId, onLeave }) {
   }, [tripId, userId]);
 
   return (
-    <div className="min-h-screen bg-[#F5F7F4] flex flex-col max-w-[1600px] mx-auto shadow-2xl overflow-hidden font-serif">
-      <main className="flex-1 flex flex-col overflow-y-auto bg-[#F5F7F4] relative">
-        <div className="sticky top-0 z-30 bg-white shadow-md p-4 flex justify-between items-center md:hidden border-b border-stone-100">
+    <div className="min-h-screen bg-stone-100 flex flex-col max-w-5xl mx-auto shadow-2xl overflow-hidden font-serif">
+      <main className="flex-1 flex flex-col overflow-y-auto bg-stone-100 relative">
+        <div className="sticky top-0 z-30 bg-white shadow-md p-4 flex justify-between items-center md:hidden border-b border-stone-200">
           <h1 className="text-xl font-bold text-emerald-900 flex items-center gap-2"><Palmtree size={24} className="text-emerald-500" /> TripMate</h1>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1 font-bold animate-pulse"><Wifi size={10}/> 連線中</span>
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1 font-bold"><Wifi size={12}/> 連線中</span>
             <span className="text-xs font-mono font-bold text-stone-500 bg-stone-100 px-3 py-1 rounded-full uppercase">{tripId}</span>
           </div>
         </div>
@@ -294,11 +272,11 @@ function AttachmentModal({ attachment, onClose }) {
   const isImage = (attachment || '').startsWith('data:image') || /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(attachment || '');
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-[32px] p-6 max-w-md w-full max-h-[90vh] flex flex-col items-center justify-between shadow-2xl relative" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 bg-black bg-opacity-80 flex flex-col items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl p-6 max-w-md w-full max-h-[90vh] flex flex-col items-center justify-between shadow-2xl relative" onClick={e => e.stopPropagation()}>
         <button 
           onClick={onClose} 
-          className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 bg-stone-100 rounded-full transition"
+          className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 bg-stone-100 rounded-full"
         >
           <X size={20}/>
         </button>
@@ -353,12 +331,12 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   ];
   return (
     <>
-      <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white p-4 rounded-full shadow-xl hover:bg-emerald-700 transition active:scale-95">
+      <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white p-4 rounded-full shadow-xl hover:bg-emerald-700 transition">
         {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
       </button>
       {isMenuOpen && (
-        <div className="fixed inset-0 bg-emerald-900/90 backdrop-blur-sm z-40 transition-opacity" onClick={() => setIsMenuOpen(false)}>
-          <div className="absolute bottom-0 left-0 w-full bg-white rounded-t-[32px] p-6 flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-stone-900 bg-opacity-70 z-40" onClick={() => setIsMenuOpen(false)}>
+          <div className="absolute bottom-0 left-0 w-full bg-white rounded-t-3xl p-6 flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
             <div className="overflow-y-auto menu-scrollbar grid grid-cols-3 gap-4 mb-8">
               {menuItems.map(item => (
                 <button key={item.id} onClick={() => onNavClick(item.id)} className={`flex flex-col items-center justify-center p-4 rounded-2xl transition ${activeTab === item.id ? 'bg-emerald-600 text-white shadow-lg' : 'bg-stone-50 text-stone-600'}`}>
@@ -378,7 +356,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
 function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
   const [openCategory, setOpenCategory] = useState('吃');
   const [weatherData, setWeatherData] = useState({});
-  const [isNoteOpen, setIsNoteOpen] = useState(false); // 首頁「便條紙」折疊開關
+  const [isNoteOpen, setIsNoteOpen] = useState(false);
   const [stickyNotes, setStickyNotes] = useState([]);
   const [noteInput, setNoteInput] = useState('');
 
@@ -390,7 +368,6 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
     });
   }, [items]);
 
-  // 獨立監聽首頁專屬便條紙
   useEffect(() => {
     if (!tripId) return;
     const unsub = onSnapshot(collection(db, 'trips', tripId, 'sticky_notes'), (snap) => {
@@ -449,7 +426,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
     else if (w.code > 3) iconStr = "☁️";
 
     return (
-      <span className="bg-emerald-950 text-emerald-200 border border-emerald-600/30 px-2.5 py-0.5 rounded-full text-[11px] font-mono flex items-center gap-1 shadow-sm">
+      <span className="bg-emerald-900 text-emerald-200 border border-emerald-700 px-2.5 py-0.5 rounded-full text-xs font-mono flex items-center gap-1 shadow-sm">
         <span>{iconStr}</span>
         <span>{w.minTemp}°~{w.maxTemp}°C</span>
         {w.rainProb > 0 && <span className="text-cyan-200">💧{w.rainProb}%</span>}
@@ -535,18 +512,15 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
   ];
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-10">
+    <div className="space-y-8 max-w-5xl mx-auto pb-10">
       
       {/* 1. 置頂快捷卡片：目前與下一站 (Now & Next) */}
       {timelineItems.length > 0 && (
-        <section className="bg-gradient-to-br from-emerald-900 via-teal-950 to-stone-900 rounded-[32px] p-6 text-white shadow-xl relative overflow-hidden border border-emerald-800/40">
-          <div className="flex items-center justify-between mb-5 border-b border-white/10 pb-3">
+        <section className="bg-emerald-950 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden border border-emerald-800">
+          <div className="flex items-center justify-between mb-5 border-b border-emerald-800 pb-3">
             <div className="flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-              </span>
-              <h2 className="text-sm font-bold tracking-wider uppercase text-emerald-300">旅程即時動態 • NOW & NEXT</h2>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <h2 className="text-xs font-bold tracking-wider uppercase text-emerald-300">旅程即時動態 • NOW & NEXT</h2>
             </div>
             <div className="text-xs text-stone-300 font-mono font-medium flex items-center gap-1">
               <Clock size={12}/> 即時同步中
@@ -554,7 +528,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
           </div>
 
           {isTripNotStarted ? (
-            <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10">
+            <div className="p-4 bg-emerald-900 rounded-2xl border border-emerald-800">
               <div className="text-xs text-emerald-300 font-bold mb-1">📅 旅程準備出發！首站行程：</div>
               <div className="text-lg font-bold text-white mb-2">{timelineItems[0]?.title}</div>
               <div className="text-xs text-stone-300 flex items-center gap-1">
@@ -563,18 +537,18 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
               </div>
             </div>
           ) : isTripOver ? (
-            <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md text-center py-6 border border-white/10">
+            <div className="p-4 bg-emerald-900 rounded-2xl text-center py-6 border border-emerald-800">
               <span className="text-2xl mb-1 block">🎉</span>
               <h3 className="font-bold text-white text-base">本次旅程已圓滿完成！</h3>
               <p className="text-xs text-stone-300 mt-1">所有美好回憶與分帳紀錄皆已安全保存。</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white/10 rounded-2xl p-4.5 backdrop-blur-md border border-emerald-500/30 flex flex-col justify-between">
+              <div className="bg-emerald-900 rounded-2xl p-4 border border-emerald-700 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500 text-stone-950 flex items-center gap-1">
-                      <Radio size={12} className="animate-pulse"/> NOW 進行中
+                    <span className="text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-400 text-stone-900 flex items-center gap-1">
+                      <Radio size={12}/> NOW 進行中
                     </span>
                     <span className="text-xs text-emerald-300 font-bold uppercase">
                       {currentItem?.type === 'res' ? '餐廳' : currentItem?.type === 'accommodation' ? '住宿' : currentItem?.type || '行程'}
@@ -595,13 +569,13 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                 </div>
 
                 {currentItem?.location && (
-                  <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                  <div className="mt-4 pt-3 border-t border-emerald-800 flex items-center justify-between">
                     <span className="text-xs text-stone-300 truncate max-w-[180px] flex items-center gap-1">
-                      <MapPin size={12} className="text-emerald-400 flex-shrink-0"/> {currentItem.location}
+                      <MapPin size={12} className="text-emerald-400"/> {currentItem.location}
                     </span>
                     <button
                       onClick={() => window.open(getNavigationLink(currentItem.location), '_blank')}
-                      className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-stone-950 rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 shadow-md"
+                      className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-stone-950 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-md"
                     >
                       <Navigation size={12}/> 即刻導航
                     </button>
@@ -609,17 +583,17 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                 )}
               </div>
 
-              <div className="bg-black/20 rounded-2xl p-4.5 backdrop-blur-md border border-white/10 flex flex-col justify-between">
+              <div className="bg-stone-900 rounded-2xl p-4 border border-stone-800 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 text-stone-200 flex items-center gap-1">
+                    <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-stone-700 text-stone-200">
                       NEXT 下一站
                     </span>
                     <span className="text-xs text-stone-400 font-bold uppercase">
                       {nextItem?.type === 'res' ? '餐廳' : nextItem?.type === 'accommodation' ? '住宿' : nextItem?.type || ''}
                     </span>
                   </div>
-                  <h3 className="text-xl font-bold text-white/90 truncate mb-1">
+                  <h3 className="text-xl font-bold text-white truncate mb-1">
                     {nextItem ? nextItem.title : "本日已無後續排程"}
                   </h3>
                   <div className="text-xs text-stone-300 flex items-center gap-1 mt-1">
@@ -631,13 +605,13 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                 </div>
 
                 {nextItem?.location && (
-                  <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                  <div className="mt-4 pt-3 border-t border-stone-800 flex items-center justify-between">
                     <span className="text-xs text-stone-300 truncate max-w-[180px] flex items-center gap-1">
-                      <MapPin size={12} className="text-stone-400 flex-shrink-0"/> {nextItem.location}
+                      <MapPin size={12} className="text-stone-400"/> {nextItem.location}
                     </span>
                     <button
                       onClick={() => window.open(getNavigationLink(nextItem.location), '_blank')}
-                      className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95"
+                      className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1"
                     >
                       <Navigation size={12}/> 查看路線
                     </button>
@@ -649,20 +623,20 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
         </section>
       )}
 
-      {/* 🌟 2. 首頁「便條紙」手風琴折疊盒 (位於即時動態與時間軸正中間) 🌟 */}
-      <section className="bg-white rounded-2xl shadow-sm border border-amber-200 overflow-hidden transition-all">
+      {/* 2. 首頁「便條紙」手風琴折疊盒 (位置在即時動態與時間軸正中間) */}
+      <section className="bg-white rounded-2xl shadow-sm border border-amber-200 overflow-hidden">
         <button
           type="button"
           onClick={() => setIsNoteOpen(!isNoteOpen)}
-          className="w-full flex items-center justify-between p-4 bg-amber-50 hover:bg-amber-100/60 transition"
+          className="w-full flex items-center justify-between p-4 bg-amber-50 hover:bg-amber-100 transition"
         >
           <div className="flex items-center gap-2">
             <span className="text-base">📝</span>
             <span className="font-bold text-amber-950 text-base">便條紙</span>
-            <span className="bg-white text-amber-900 text-xs font-bold px-2.5 py-0.5 rounded-full border border-amber-200">
+            <span className="bg-white text-amber-900 text-xs font-bold px-2 py-0.5 rounded-full border border-amber-200">
               {stickyNotes.length}
             </span>
-            <span className="text-xs text-amber-700/80 hidden sm:inline">（點擊展開／收合，隨手記文字資訊）</span>
+            <span className="text-xs text-amber-700 hidden sm:inline">（點擊展開／收合，隨手記文字資訊）</span>
           </div>
           <div className="text-amber-800">
             {isNoteOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
@@ -670,14 +644,14 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
         </button>
 
         {isNoteOpen && (
-          <div className="p-4 border-t border-amber-100 bg-white space-y-3 animate-in fade-in duration-200">
+          <div className="p-4 border-t border-amber-100 bg-white space-y-3">
             <form onSubmit={handleAddStickyNote} className="flex gap-2">
               <input
                 type="text"
                 value={noteInput}
                 onChange={e => setNoteInput(e.target.value)}
                 placeholder="在此輸入臨時文字資訊、日語句子或飯店地址..."
-                className="flex-1 p-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none text-[13px] text-stone-800 focus:border-amber-500"
+                className="flex-1 p-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none text-xs text-stone-800 focus:border-amber-500"
               />
               <button
                 type="submit"
@@ -693,8 +667,8 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                   尚無便條紙紀錄，快在上方新增隨手筆記吧！
                 </div>
               ) : stickyNotes.map(note => (
-                <div key={note.id} className="p-3 bg-amber-50/50 rounded-xl border border-amber-100 flex items-start justify-between gap-3">
-                  <p className="flex-1 text-[13px] leading-relaxed text-stone-800 font-sans whitespace-pre-wrap break-words">
+                <div key={note.id} className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex items-start justify-between gap-3">
+                  <p className="flex-1 text-xs leading-relaxed text-stone-800 font-sans whitespace-pre-wrap break-words">
                     {note.content}
                   </p>
                   <button
@@ -718,7 +692,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
           <Home className="text-emerald-600" size={32}/> 旅程時間軸
         </h2>
         <div className="space-y-6 relative">
-          <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-emerald-200/50"></div>
+          <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-emerald-200"></div>
           {timelineItems.length === 0 ? <div className="ml-10 p-6 bg-white rounded-2xl text-stone-400 border border-stone-100">尚無行程</div> : 
             timelineItems.map((item, index) => {
               const isMemo = item.type === 'memo';
@@ -892,7 +866,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                 </button>
 
                 {isOpen && (
-                  <div className="p-4 border-t border-stone-100 bg-white space-y-3 animate-in fade-in duration-200">
+                  <div className="p-4 border-t border-stone-100 bg-white space-y-3">
                     {catItems.length === 0 ? (
                       <div className="text-center py-6 text-stone-300 text-xs font-bold">尚無願望紀錄</div>
                     ) : (
@@ -990,9 +964,7 @@ function TodoListView({ tripId, items }) {
             className="bg-white p-4 rounded-xl border border-stone-100 flex items-center shadow-sm cursor-pointer hover:bg-stone-50 transition" 
             onClick={() => updateDoc(doc(db, 'trips', tripId, 'todo', item.id), { completed: !item.completed })}
           >
-            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>
-              {item.completed && <CheckCircle2 size={16} className="text-white"/>}
-            </div>
+            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>{item.completed && <CheckCircle2 size={16} className="text-white"/>}</div>
             <span className={`flex-1 text-base font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.task}</span>
             <button 
               type="button" 
@@ -1081,51 +1053,51 @@ function ItineraryView({ tripId, items }) {
         <div className="flex gap-2 flex-wrap">
           <button 
             onClick={() => { setEditingItem(null); setShowAddMemo(true); }} 
-            className="bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-3 rounded-2xl flex items-center gap-1.5 font-bold shadow-md transition active:scale-95 text-xs"
+            className="bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-3 rounded-2xl flex items-center gap-1.5 font-bold shadow-md transition text-xs"
           >
             <StickyNote size={16}/> + 備忘錄
           </button>
           <button 
             onClick={() => { setEditingItem(null); setShowAddItinerary(true); }} 
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-2xl flex items-center gap-1.5 font-bold shadow-lg transition active:scale-95 text-xs"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-2xl flex items-center gap-1.5 font-bold shadow-lg transition text-xs"
           >
             <Plus size={16}/> + 新增行程
           </button>
         </div>
       </div>
 
-      {/* ☔ 雨天備案與備選庫 */}
-      <div className="bg-gradient-to-r from-teal-50 to-emerald-50 rounded-2xl border border-teal-200 p-4 shadow-sm">
+      {/* 雨天備案與備選庫 */}
+      <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-4 shadow-sm">
         <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowPool(!showPool)}>
           <div className="flex items-center gap-2">
-            <span className="p-2 bg-teal-500 text-white rounded-xl shadow-sm text-sm">
+            <span className="p-2 bg-emerald-500 text-white rounded-xl shadow-sm text-sm">
               ☔
             </span>
             <div>
-              <h4 className="font-bold text-teal-950 text-sm">雨天備案與彈性備選庫</h4>
-              <p className="text-xs text-teal-700">未排定時間的候補景點，遇到下雨或排隊過長可即時替換</p>
+              <h4 className="font-bold text-emerald-950 text-sm">雨天備案與彈性備選庫</h4>
+              <p className="text-xs text-emerald-700">未排定時間的候補景點，遇到下雨或排隊過長可即時替換</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="bg-teal-200 text-teal-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
+            <span className="bg-emerald-200 text-emerald-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
               {unscheduledPool.length} 個候補
             </span>
-            {showPool ? <ChevronUp size={18} className="text-teal-700"/> : <ChevronDown size={18} className="text-teal-700"/>}
+            {showPool ? <ChevronUp size={18} className="text-emerald-700"/> : <ChevronDown size={18} className="text-emerald-700"/>}
           </div>
         </div>
 
         {showPool && (
-          <div className="mt-4 pt-3 border-t border-teal-200 space-y-2.5">
+          <div className="mt-4 pt-3 border-t border-emerald-200 space-y-2.5">
             {unscheduledPool.length === 0 ? (
-              <div className="text-center py-4 text-teal-600 text-xs font-bold">
+              <div className="text-center py-4 text-emerald-600 text-xs font-bold">
                 目前沒有備選景點。新增行程時「時間欄位留空」即可存入備選庫！
               </div>
             ) : unscheduledPool.map(poolItem => (
-              <div key={poolItem.id} className="bg-white p-3 rounded-xl border border-teal-100 shadow-sm flex items-center justify-between">
+              <div key={poolItem.id} className="bg-white p-3 rounded-xl border border-emerald-100 shadow-sm flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-stone-800 text-sm">{poolItem.title}</span>
-                    <span className="text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded font-bold uppercase">
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-bold uppercase">
                       {poolItem.type === 'res' ? '餐廳' : '景點'}
                     </span>
                   </div>
@@ -1138,7 +1110,7 @@ function ItineraryView({ tripId, items }) {
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => handleAssignToToday(poolItem)}
-                    className="px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm"
                   >
                     <Plus size={12}/> 排入今日 14:00
                   </button>
@@ -1296,14 +1268,14 @@ function ItineraryView({ tripId, items }) {
                   className={`p-1.5 transition-colors ${isMemo ? 'text-amber-600 hover:text-amber-800' : isRestaurant ? 'text-orange-600 hover:text-orange-800' : 'text-stone-400 hover:text-emerald-600'}`} 
                   title="編輯"
                 >
-                  <Pencil size={16} />
+                  <Pencil size={18} />
                 </button>
                 <button 
                   onClick={() => deleteDoc(doc(db, 'trips', tripId, 'items', item.id))} 
                   className="text-stone-300 hover:text-red-500 p-1.5 transition-colors" 
                   title="刪除"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={18} />
                 </button>
               </div>
             </div>
@@ -1325,8 +1297,7 @@ function AddMemoModal({ tripId, initialData, onClose }) {
     type: 'memo' 
   }); 
 
-  const sub = async (e) => 
-  { 
+  const sub = async (e) => { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1339,8 +1310,8 @@ function AddMemoModal({ tripId, initialData, onClose }) {
   const inputClass = "w-full p-3 bg-stone-50 border rounded-xl outline-none focus:border-amber-500";
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl border-t-4 border-amber-500">
+    <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border-t-4 border-amber-500">
         <h3 className="font-bold text-xl mb-4 text-amber-900 flex items-center gap-2">
           <StickyNote size={24} className="text-amber-500"/>
           {initialData ? '編輯旅遊備忘錄' : '新增旅遊備忘錄'}
@@ -1418,8 +1389,8 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
   const inputClass = "w-full p-3 bg-stone-50 border rounded-xl outline-none focus:border-emerald-500";
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
         <h3 className="font-bold text-xl mb-4 text-emerald-900">
           {initialData ? '編輯行程規劃' : '新增行程規劃'}
         </h3>
@@ -1476,7 +1447,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
 
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600">取消</button>
-            <button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg hover:bg-emerald-700">
+            <button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg">
               {initialData ? '更新行程' : '確認新增'}
             </button>
           </div>
@@ -1510,7 +1481,7 @@ function TransportView({ tripId, items, onPreviewAttachment }) {
       </div>
       <div className="grid gap-4">
         {tItems.map(item=>(
-          <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 flex justify-between items-center">
+          <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-stone-200 flex justify-between items-center">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-bold text-blue-600 uppercase px-2 py-0.5 bg-blue-50 rounded-full">{item.type}</span>
@@ -1581,11 +1552,11 @@ function AddTransportModal({ tripId, initialData, onClose }) {
     onClose(); 
   }; 
 
-  const inputClass = "w-full p-3 bg-stone-50 border border-stone-100 rounded-xl outline-none focus:border-blue-500 transition-colors";
+  const inputClass = "w-full p-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-blue-500 transition-colors";
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl max-h-[92vh] overflow-y-auto menu-scrollbar">
+    <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[92vh] overflow-y-auto menu-scrollbar">
         <h3 className="font-bold text-xl mb-4 text-blue-900 flex items-center gap-2">
           <Train size={24}/> {initialData ? '編輯交通票券' : '新增交通票券'}
         </h3>
@@ -1665,11 +1636,11 @@ function AccommodationView({ tripId, items, onPreviewAttachment }) {
         <button onClick={()=>{ setEditingItem(null); setShowAdd(true); }} className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg"><Plus size={20}/> 新增住宿</button>
       </div>
       {aItems.map(i=>(
-        <div key={i.id} className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex justify-between items-center mb-4">
+        <div key={i.id} className="bg-white p-6 rounded-2xl shadow-sm border border-stone-200 flex justify-between items-center mb-4">
           <div className="flex-1">
             <div className="font-bold text-xl text-stone-800 mb-1">{i.title}</div>
             <div className="text-sm text-stone-500 mb-3 flex items-center gap-1"><MapPin size={14}/> {i.location} <a href={getGoogleMapsLink(i.location)} target="_blank" rel="noreferrer" className="ml-2 text-blue-500 font-bold hover:underline text-xs">地圖</a></div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-stone-50 p-4 rounded-2xl border border-stone-50 shadow-inner">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-stone-50 p-4 rounded-2xl border border-stone-200">
               <div className="text-xs text-stone-600">
                 <strong>入住時間:</strong> {(i.checkInDatetime || `${i.checkInDate || ''} ${i.checkInTime || ''}`).replace('T', ' ') || '未定時間'}
               </div>
@@ -1732,8 +1703,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
     }
   };
 
-  const sub = async (e) => 
-  { 
+  const sub = async (e) => { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1743,11 +1713,11 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
     onClose(); 
   }; 
 
-  const inputClass = "w-full p-3 bg-stone-50 border border-stone-100 rounded-xl outline-none focus:border-emerald-500 transition-colors";
+  const inputClass = "w-full p-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-emerald-500 transition-colors";
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[92vh] overflow-y-auto menu-scrollbar">
+    <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[92vh] overflow-y-auto menu-scrollbar">
         <h3 className="font-bold text-xl mb-4 text-emerald-900 flex items-center gap-2">
           <BedDouble size={24}/> {initialData ? '編輯住宿登錄' : '新增住宿登錄'}
         </h3>
@@ -1828,7 +1798,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
           </div>
 
           <div className="flex gap-2 pt-3">
-            <button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600 btn-active-effect">取消</button>
+            <button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600">取消</button>
             <button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg">
               {initialData ? '更新住宿' : '確認新增'}
             </button>
@@ -1976,7 +1946,7 @@ function JapanesePhrases() {
             onClick={() => setActiveCategory(shortKey)}
             className={`py-3 px-2 rounded-2xl font-bold text-xs transition-all flex flex-col items-center justify-center gap-1 border ${
               activeCategory === shortKey 
-                ? 'bg-emerald-600 text-white shadow-md border-emerald-600 scale-[1.02]' 
+                ? 'bg-emerald-600 text-white shadow-md border-emerald-600' 
                 : 'bg-white text-stone-700 hover:bg-stone-50 border-stone-200'
             }`}
           >
@@ -1986,7 +1956,7 @@ function JapanesePhrases() {
         ))}
       </div>
 
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 space-y-3">
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-200 space-y-3">
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-bold text-lg text-emerald-900 flex items-center gap-2">
             {categories[activeCategory]?.icon}
@@ -2004,7 +1974,7 @@ function JapanesePhrases() {
               <div 
                 key={idx} 
                 onClick={() => playGoogleAudio(jp)}
-                className="flex justify-between items-center bg-stone-50 hover:bg-emerald-50/60 p-3.5 rounded-2xl border border-stone-100 transition-colors cursor-pointer group"
+                className="flex justify-between items-center bg-stone-50 hover:bg-emerald-50 p-3.5 rounded-2xl border border-stone-100 transition-colors cursor-pointer group"
               >
                 <div>
                   <div className="font-bold text-stone-800 text-base group-hover:text-emerald-900 transition-colors">{jp}</div>
@@ -2013,7 +1983,7 @@ function JapanesePhrases() {
                 <button 
                   type="button"
                   onClick={(e) => { e.stopPropagation(); playGoogleAudio(jp); }}
-                  className="p-2.5 text-emerald-600 hover:bg-emerald-100/70 rounded-xl transition-all active:scale-90"
+                  className="p-2.5 text-emerald-600 hover:bg-emerald-100 rounded-xl transition-all"
                   title="播放語音"
                 >
                   <Volume2 size={20} />
@@ -2135,13 +2105,13 @@ function ExpenseView({ tripId, expenses, members }) {
         <div className="flex flex-wrap gap-2">
           <button 
             onClick={() => setShowMembersModal(true)} 
-            className="bg-stone-800 hover:bg-stone-900 text-white px-4 py-3 rounded-2xl flex items-center gap-1.5 font-bold shadow-md transition active:scale-95"
+            className="bg-stone-800 hover:bg-stone-900 text-white px-4 py-3 rounded-2xl flex items-center gap-1.5 font-bold shadow-md transition"
           >
             <Users size={18}/> 誰來付錢
           </button>
           <button 
             onClick={()=>{ setEditingExpense(null); setShowAdd(true); }} 
-            className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg btn-active-effect hover:bg-emerald-700"
+            className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg hover:bg-emerald-700"
           >
             <Plus size={20} /> 新增支出
           </button>
@@ -2150,7 +2120,7 @@ function ExpenseView({ tripId, expenses, members }) {
 
       {reportMode ? (
         <div className="space-y-6">
-          <div className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm space-y-4">
+          <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm space-y-4">
             <h3 className="font-bold text-emerald-900 text-lg flex items-center gap-2">
               <UserCheck size={20} className="text-emerald-600"/> 成員收支總覽 (折合台幣)
             </h3>
@@ -2195,7 +2165,7 @@ function ExpenseView({ tripId, expenses, members }) {
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-[32px] shadow-sm border border-stone-100 divide-y divide-stone-100 overflow-hidden">
+        <div className="bg-white rounded-3xl shadow-sm border border-stone-200 divide-y divide-stone-100 overflow-hidden">
           {expenses.length === 0 ? <div className="p-10 text-center text-stone-400">尚無紀錄</div> : expenses.map(exp => (
             <div key={exp.id} className="p-5 flex flex-col hover:bg-stone-50 transition-colors">
               <div className="flex justify-between items-center mb-2">
@@ -2218,7 +2188,7 @@ function ExpenseView({ tripId, expenses, members }) {
                 </div>
               </div>
               <div className="bg-stone-50 p-3 rounded-xl border border-stone-100">
-                <div className="text-[10px] font-bold text-stone-400 mb-1 flex items-center gap-1 uppercase tracking-wider"><Users size={10}/> 分攤明細 ({exp.splitMode === 'average' ? '自動平均' : '手動分攤'})</div>
+                <div className="text-xs font-bold text-stone-400 mb-1 flex items-center gap-1 uppercase tracking-wider"><Users size={12}/> 分攤明細 ({exp.splitMode === 'average' ? '自動平均' : '手動分攤'})</div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {exp.splitDetails?.map((detail, idx) => (
                     <div key={idx} className="flex justify-between items-center bg-white px-3 py-1.5 rounded-lg border border-stone-100 shadow-sm">
@@ -2254,8 +2224,8 @@ function MembersManagementModal({ tripId, members, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] w-full max-w-md p-6 shadow-2xl space-y-4">
+    <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4">
         <h3 className="font-bold text-xl text-stone-900 flex items-center gap-2">
           <Users size={24} className="text-emerald-600"/> 誰來付錢（旅程成員設定）
         </h3>
@@ -2370,8 +2340,8 @@ function AddExpenseModal({ tripId, initialData, members, onClose }) {
   const inputStyle = "w-full p-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-emerald-500 transition-colors";
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
         <h3 className="font-bold text-xl mb-4 text-emerald-900 flex items-center gap-2">
           <CreditCard size={24}/> {initialData ? '編輯支出與分攤' : '新增支出與分攤'}
         </h3>
@@ -2407,8 +2377,8 @@ function AddExpenseModal({ tripId, initialData, members, onClose }) {
             )}
           </div>
 
-          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
-            <div className="flex gap-2 mb-4 p-1 bg-white rounded-xl border border-stone-200 shadow-inner">
+          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200">
+            <div className="flex gap-2 mb-4 p-1 bg-white rounded-xl border border-stone-200">
               <button type="button" onClick={()=>setSplitMode('average')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${splitMode==='average' ? 'bg-emerald-600 text-white shadow-md' : 'text-stone-400'}`}>自動平均</button>
               <button type="button" onClick={()=>setSplitMode('manual')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${splitMode==='manual' ? 'bg-emerald-600 text-white shadow-md' : 'text-stone-400'}`}>手動分攤</button>
             </div>

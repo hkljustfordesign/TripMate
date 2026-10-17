@@ -38,6 +38,12 @@ const detectCurrency = (id) => {
   return 'TWD'; 
 };
 
+// 判斷是否為日本行程/地點
+const checkIsJapan = (tripId, location) => {
+  const text = `${tripId || ''} ${location || ''}`.toLowerCase();
+  return /japan|tokyo|osaka|kyoto|okinawa|hokkaido|fukuoka|nagoya|nrt|hnd|kix|fuk|日本|東京|大阪|京都|沖繩|北海道|福岡|名古屋|九州/.test(text);
+};
+
 const calculateDuration = (start, end) => {
   if (!start || !end) return null;
   const startDate = new Date(start);
@@ -250,7 +256,6 @@ function TripDashboard({ tripId, userId, onLeave }) {
         </div>
       </main>
 
-      {/* 滿版憑證彈窗 */}
       {previewAttachment && (
         <AttachmentModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
       )}
@@ -344,13 +349,14 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (包含置頂「便條紙」手風琴折疊盒) ---
+// --- 視圖組件: 首頁 (包含折疊便條紙與行程旁 Mapcode 支援一鍵複製) ---
 function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
   const [openCategory, setOpenCategory] = useState('吃');
   const [weatherData, setWeatherData] = useState({});
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const [stickyNotes, setStickyNotes] = useState([]);
   const [noteInput, setNoteInput] = useState('');
+  const [copiedCode, setCopiedCode] = useState(null);
 
   const timelineItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -379,6 +385,13 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
     });
     setNoteInput('');
     setIsNoteOpen(true);
+  };
+
+  const copyToClipboard = (text) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedCode(text);
+    setTimeout(() => setCopiedCode(null), 2000);
   };
 
   useEffect(() => {
@@ -678,7 +691,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
         )}
       </section>
 
-      {/* 3. 旅程時間軸 */}
+      {/* 3. 旅程時間軸 (含 Mapcode 備註展示與複製按鈕) */}
       <section>
         <h2 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3 mb-6">
           <Home className="text-emerald-600" size={32}/> 旅程時間軸
@@ -711,7 +724,6 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
 
               return (
                 <div key={item.id} className="relative ml-10">
-                  {/* 日期標題 ＋ 天氣資訊串接 */}
                   {isFirstItemOfDay && (
                     <div className="mb-3.5 -ml-8 flex items-center gap-2 z-20 relative flex-wrap">
                       <div className="bg-emerald-800 text-white font-mono font-bold text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-emerald-700">
@@ -798,7 +810,6 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                       </div>
                     )}
 
-                    {/* 快速出示憑證截圖 */}
                     {item.attachment && (
                       <div className="mt-2.5">
                         <button
@@ -811,9 +822,24 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                     )}
 
                     {!isMemo && !isTransport && item.location && (
-                      <div className="text-sm text-stone-600 mt-2 flex items-center gap-1">
-                        <MapPin size={14}/> {item.location} 
-                        <a href={getGoogleMapsLink(item.location)} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 font-bold hover:underline">地圖</a>
+                      <div className="text-sm text-stone-600 mt-2 flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1">
+                          <MapPin size={14}/> {item.location} 
+                          <a href={getGoogleMapsLink(item.location)} target="_blank" rel="noreferrer" className="ml-1 text-blue-600 font-bold hover:underline">地圖</a>
+                        </div>
+                        
+                        {/* 🚗 日本自駕專用 Mapcode 徽章 (支援一鍵複製) */}
+                        {item.mapcode && (
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(item.mapcode)}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1 transition active:scale-95 shadow-xs"
+                            title="點擊複製 Mapcode 到剪貼簿"
+                          >
+                            <span>🚗 Mapcode: {item.mapcode}</span>
+                            <span className="text-[10px] text-indigo-500">{copiedCode === item.mapcode ? '已複製！' : '複製'}</span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -888,6 +914,86 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
           })}
         </div>
       </section>
+    </div>
+  );
+}
+
+function PackingListView({ tripId, items }) {
+  const [newItem, setNewItem] = useState('');
+  const handleAdd = async (e) => {
+    e.preventDefault(); if (!newItem.trim()) return;
+    await addDoc(collection(db, 'trips', tripId, 'packing'), { item: newItem.trim(), completed: false, createdAt: serverTimestamp() });
+    setNewItem('');
+  };
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <div className="flex justify-between items-end mb-4">
+        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Luggage className="text-emerald-600" size={32}/> 行李清單</h2>
+      </div>
+      <form onSubmit={handleAdd} className="flex gap-2 bg-white p-2 rounded-2xl border border-stone-100 shadow-sm">
+        <input type="text" value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="新增行李..." className="flex-1 p-3 bg-stone-50 rounded-xl outline-none" />
+        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl"><Plus size={24}/></button>
+      </form>
+      <div className="space-y-3">
+        {items.map((item) => (
+          <div key={item.id} className="flex items-center bg-white p-4 rounded-xl border border-stone-100 shadow-sm cursor-pointer" onClick={() => updateDoc(doc(db, 'trips', tripId, 'packing', item.id), { completed: !item.completed })}>
+            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>{item.completed && <CheckCircle2 size={16} className="text-white"/>}</div>
+            <span className={`flex-1 text-lg font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.item}</span>
+            <button type="button" onClick={(e) => { e.stopPropagation(); deleteDoc(doc(db, 'trips', tripId, 'packing', item.id)); }} className="text-stone-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TodoListView({ tripId, items }) {
+  const [newItem, setNewItem] = useState('');
+
+  const handleAddTodo = async (e) => {
+    e.preventDefault(); if (!newItem.trim()) return;
+    await addDoc(collection(db, 'trips', tripId, 'todo'), { task: newItem.trim(), completed: false, createdAt: serverTimestamp() });
+    setNewItem('');
+  };
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3">
+        <ClipboardList className="text-emerald-600" size={32}/> 代辦事項
+      </h2>
+      <form onSubmit={handleAddTodo} className="flex gap-2 bg-white p-2 rounded-2xl border border-stone-100 shadow-sm">
+        <input 
+          type="text" 
+          value={newItem} 
+          onChange={(e) => setNewItem(e.target.value)} 
+          placeholder="新增一般代辦事項 (例如: 買網卡、換日幣)..." 
+          className="flex-1 p-3 bg-stone-50 rounded-xl outline-none text-sm" 
+        />
+        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-700 transition">
+          <Plus size={22}/>
+        </button>
+      </form>
+      <div className="space-y-3">
+        {items.map((item) => (
+          <div 
+            key={item.id} 
+            className="bg-white p-4 rounded-xl border border-stone-100 flex items-center shadow-sm cursor-pointer hover:bg-stone-50 transition" 
+            onClick={() => updateDoc(doc(db, 'trips', tripId, 'todo', item.id), { completed: !item.completed })}
+          >
+            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>
+              {item.completed && <CheckCircle2 size={16} className="text-white"/>}
+            </div>
+            <span className={`flex-1 text-base font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.task}</span>
+            <button 
+              type="button" 
+              onClick={(e) => { e.stopPropagation(); deleteDoc(doc(db, 'trips', tripId, 'todo', item.id)); }} 
+              className="text-stone-300 hover:text-red-500 p-2"
+            >
+              <Trash2 size={18}/>
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -977,6 +1083,7 @@ function ItineraryView({ tripId, items }) {
         </div>
       </div>
 
+      {/* 雨天備案與備選庫 */}
       <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-4 shadow-sm">
         <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowPool(!showPool)}>
           <div className="flex items-center gap-2">
@@ -1014,6 +1121,11 @@ function ItineraryView({ tripId, items }) {
                   {poolItem.location && (
                     <div className="text-xs text-stone-400 mt-0.5 flex items-center gap-1">
                       <MapPin size={10}/> {poolItem.location}
+                    </div>
+                  )}
+                  {poolItem.mapcode && (
+                    <div className="text-xs text-indigo-600 font-mono font-bold mt-0.5">
+                      🚗 Mapcode: {poolItem.mapcode}
                     </div>
                   )}
                 </div>
@@ -1148,8 +1260,15 @@ function ItineraryView({ tripId, items }) {
                   ) : '未定時間'}
                 </div>
                 {!isMemo && item.location && (
-                  <div className="text-sm text-stone-500 mt-1 flex items-center gap-1">
-                    <MapPin size={12}/> {item.location}
+                  <div className="text-sm text-stone-500 mt-1 flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1">
+                      <MapPin size={12}/> {item.location}
+                    </div>
+                    {item.mapcode && (
+                      <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded text-xs font-mono font-bold">
+                        🚗 Mapcode: {item.mapcode}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -1259,12 +1378,26 @@ function AddMemoModal({ tripId, initialData, onClose }) {
   ); 
 }
 
+// --- 彈窗組件: 新增/編輯行程規劃 (支援日本 Mapcode 搜尋與儲存) ---
 function AddItineraryModal({ tripId, initialData, onClose }) { 
   const [sightName, setSightName] = useState(initialData?.type !== 'res' ? (initialData?.title || '') : '');
   const [restaurantName, setRestaurantName] = useState(initialData?.type === 'res' ? (initialData?.title || '') : '');
   const [datetime, setDatetime] = useState(initialData?.datetime || '');
   const [endDatetime, setEndDatetime] = useState(initialData?.endDatetime || '');
   const [location, setLocation] = useState(initialData?.location || '');
+  const [mapcode, setMapcode] = useState(initialData?.mapcode || '');
+
+  // 判定是否為日本景點行程 (排除餐廳與非日本地區)
+  const isSight = Boolean(sightName.trim()) || (!restaurantName.trim() && !sightName.trim());
+  const isJapanSight = useMemo(() => {
+    return isSight && checkIsJapan(tripId, `${sightName} ${location}`);
+  }, [tripId, sightName, location, isSight]);
+
+  const openMapcodeSearch = () => {
+    const query = sightName.trim() || location.trim();
+    const searchUrl = `https://japanmapcode.com/en?fbclid=IwY2xjawVAbuhleHRuA2FlbQIxMABwZG9mBWJyaWQRMUNGcGpZeVFXQWgxNFhCWG9zcnRjBmFwcF9pZBAyMjIwMzkxNzg4MjAwODkyAAEehwRrGcS4LASTEw8Y8V8i6zrj9B9QrjOscP8vB1KEKh0L3Il3MnoheniW0_g_aem_qpTRiNDnG21Sk9xlnvt75Q#google_vignette`;
+    window.open(searchUrl, '_blank');
+  };
 
   const sub = async (e) => { 
     e.preventDefault(); 
@@ -1283,7 +1416,8 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
       type: finalType,
       datetime,
       endDatetime,
-      location
+      location,
+      mapcode: finalType === 'sight' ? mapcode.trim() : ''
     };
 
     if (initialData?.id) {
@@ -1298,7 +1432,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
+      <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[92vh] overflow-y-auto menu-scrollbar">
         <h3 className="font-bold text-xl mb-4 text-emerald-900">
           {initialData ? '編輯行程規劃' : '新增行程規劃'}
         </h3>
@@ -1313,7 +1447,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
             </label>
             <input 
               className={inputClass} 
-              placeholder="例如: 淺草寺、晴空塔" 
+              placeholder="例如: 淺草寺、晴空塔、古宇利大橋" 
               value={sightName} 
               onChange={(e) => {
                 setSightName(e.target.value);
@@ -1352,6 +1486,34 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
             <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">地點 (與地圖導航連動)</label>
             <input className={inputClass} placeholder="地點或詳細地址" value={location} onChange={(e) => setLocation(e.target.value)} required/>
           </div>
+
+          {/* 🚗 日本自駕專屬：Mapcode 輸入與查詢專區 (只在景點且符合日本行程時顯示) */}
+          {isJapanSight && (
+            <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-indigo-950 flex items-center gap-1">
+                  <span>🚗</span> 日本租車 GPS Mapcode (自駕專用)
+                </label>
+                <button
+                  type="button"
+                  onClick={openMapcodeSearch}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline flex items-center gap-0.5"
+                  title="前往 Japan Mapcode 搜尋此地點"
+                >
+                  🔍 查詢 Mapcode
+                </button>
+              </div>
+              <input 
+                className="w-full p-2.5 bg-white border border-indigo-200 rounded-xl outline-none text-xs font-mono font-bold text-indigo-900 focus:border-indigo-500" 
+                placeholder="例如: 13 318 318*42 (查到後直接貼上)" 
+                value={mapcode} 
+                onChange={(e) => setMapcode(e.target.value)}
+              />
+              <p className="text-[11px] text-indigo-600 leading-normal">
+                💡 點擊「查詢 Mapcode」開啟官方查碼網站，將查到的號碼貼在上方，首頁即可一鍵複製給車機導航！
+              </p>
+            </div>
+          )}
 
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600">取消</button>
@@ -2288,7 +2450,7 @@ function AddExpenseModal({ tripId, initialData, members, onClose }) {
             ) : (
               <div className="space-y-3">
                 <div className="flex justify-between items-center"><label className="block text-xs font-bold text-emerald-800 ml-1">分攤名單</label><button type="button" onClick={() => handleAddPerson()} className="text-emerald-600 text-[10px] font-bold">+ 新增成員</button></div>
-                <div className="space-y-2 max-h-40 overflow-y-auto">{manualSplits.map((s, i) => (<div key={i} className="flex gap-2">{members.length > 0 ? (<select className="w-1/2 p-2 bg-white border rounded-lg text-sm" value={s.name} onChange={(e) => updateManualSplit(i, 'name', e.target.value)}><option value="">選擇成員</option>{members.map((m) => (<option key={m.id} value={m.name}>{m.name}</option>))}</select>) : (<input type="text" placeholder="人名" className="w-1/2 p-2 bg-white border rounded-lg text-sm" value={s.name} onChange={(e) => updateManualSplit(i, 'name', e.target.value)}/>)}<input type="number" placeholder="金額" className="w-1/3 p-2 bg-white border rounded-lg text-sm font-mono" value={s.amount} onChange={(e) => updateManualSplit(i, 'amount', e.target.value)}/><button type="button" onClick={() => handleRemovePerson(i)} className="text-stone-300 hover:text-red-500"><UserMinus size={16}/></button></div>))}</div>
+                <div className="space-y-2 max-h-40 overflow-y-auto">{manualSplits.map((s, i) => (<div key={i} className="flex gap-2">{members.length > 0 ? (<select className="w-1/2 p-2 bg-white border rounded-lg text-sm" value={s.name} onChange={(e) => updateManualSplit(i, 'name', e.target.value)}><option value="">選擇成員</option>{members.map(m => (<option key={m.id} value={m.name}>{m.name}</option>))}</select>) : (<input type="text" placeholder="人名" className="w-1/2 p-2 bg-white border rounded-lg text-sm" value={s.name} onChange={(e) => updateManualSplit(i, 'name', e.target.value)}/>)}<input type="number" placeholder="金額" className="w-1/3 p-2 bg-white border rounded-lg text-sm font-mono" value={s.amount} onChange={(e) => updateManualSplit(i, 'amount', e.target.value)}/><button type="button" onClick={() => handleRemovePerson(i)} className="text-stone-300 hover:text-red-500"><UserMinus size={16}/></button></div>))}</div>
               </div>
             )}
           </div>

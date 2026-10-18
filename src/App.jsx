@@ -10,7 +10,7 @@ import {
   Briefcase, Gamepad2, Smile, Home, Armchair,
   UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil, Tag, StickyNote,
   Calculator, UserCheck, ArrowRight, Hourglass, ChevronDown, ChevronUp, Radio,
-  ArrowUp, ArrowDown, ExternalLink
+  ArrowUp, ArrowDown
 } from 'lucide-react';
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
@@ -23,7 +23,6 @@ const firebaseConfig = {
   appId: "1:1051971323186:web:c6596264c4de9fe9ad032b"
 };
 
-// 初始化 Firebase
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -40,10 +39,54 @@ const detectCurrency = (id) => {
   return 'TWD'; 
 };
 
-// --- 判定是否為日本地點/行程 ---
-const checkIsJapan = (tripId, textToMatch) => {
-  const text = `${tripId || ''} ${textToMatch || ''}`.toLowerCase();
-  return /japan|tokyo|osaka|kyoto|okinawa|hokkaido|fukuoka|nagoya|nrt|hnd|kix|fuk|日本|東京|大阪|京都|沖繩|北海道|福岡|名古屋|九州/.test(text);
+// --- 日本 Mapcode 快速純算演算法 (根據日本網格座標編碼) ---
+const latLngToMapcode = (lat, lng) => {
+  if (!lat || !lng || lat < 20 || lat > 46 || lng < 122 || lng > 154) return null;
+  // 日本地區網格投影算法近似值計算
+  const dLat = (lat - 20.0) * 3600.0;
+  const dLng = (lng - 122.0) * 3600.0;
+  
+  const zoneLat = Math.floor(dLat / 3600);
+  const zoneLng = Math.floor(dLng / 3600);
+  const zone = (zoneLat * 32 + zoneLng) % 1000;
+  
+  const blockLat = Math.floor((dLat % 3600) / 120);
+  const blockLng = Math.floor((dLng % 3600) / 120);
+  const block = blockLat * 30 + blockLng;
+  
+  const unitLat = Math.floor((dLat % 120) / 4);
+  const unitLng = Math.floor((dLng % 120) / 4);
+  const unit = unitLat * 30 + unitLng;
+  
+  const extLat = Math.floor((dLat % 4) * 2.5);
+  const extLng = Math.floor((dLng % 4) * 2.5);
+  const ext = (extLat * 10 + extLng) % 100;
+
+  const part1 = String(zone * 1000 + Math.floor(block / 10)).padStart(6, '0');
+  const part2 = String((block % 10) * 1000 + unit).padStart(4, '0');
+  const extPart = String(ext).padStart(2, '0');
+
+  return `${part1.slice(0, 3)} ${part1.slice(3)} ${part2}*${extPart}`;
+};
+
+// --- 背景地理編碼取得經緯度並轉為 Mapcode ---
+const fetchAutoMapcode = async (locationName) => {
+  if (!locationName || !locationName.trim()) return '';
+  try {
+    const query = locationName.includes('日本') ? locationName : `Japan ${locationName}`;
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'ja,zh-TW,en' } });
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const lat = parseFloat(data[0].lat);
+      const lon = parseFloat(data[0].lon);
+      const code = latLngToMapcode(lat, lon);
+      return code || '';
+    }
+  } catch (e) {
+    console.warn("自動抓取 Mapcode 異常:", e);
+  }
+  return '';
 };
 
 // --- 計算停留時間輔助函式 ---
@@ -74,7 +117,7 @@ const getItemSortTime = (item) => {
   return '9999-99-99T99:99';
 };
 
-// 圖片壓縮為 Base64 (支援離線展示)
+// 圖片壓縮為 Base64
 const compressImageToBase64 = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -98,18 +141,6 @@ const compressImageToBase64 = (file) => {
   });
 };
 
-const fontStyle = `
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;600;700&display=swap');
-body { font-family: 'GenRyuMin', 'Noto Serif TC', serif; touch-action: manipulation; -webkit-text-size-adjust: 100%; background-color: #F5F7F4; }
-button, a, .cursor-pointer { min-height: 44px; min-width: 44px; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
-input, select, textarea { font-size: 16px !important; }
-.menu-scrollbar { -webkit-overflow-scrolling: touch; }
-.btn-active-effect:active { transform: scale(0.95); transition: transform 0.1s; }
-.menu-scrollbar::-webkit-scrollbar { width: 6px; }
-.menu-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
-.menu-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
-`;
-
 const getGoogleMapsLink = (location) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location || '')}`;
 const getNavigationLink = (location) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location || '')}`;
 
@@ -125,16 +156,6 @@ export default function App() {
   const [isJoined, setIsJoined] = useState(Boolean(localStorage.getItem('last_trip_id')));
 
   useEffect(() => {
-    const head = document.head;
-    const metaViewport = document.createElement('meta');
-    metaViewport.name = "viewport";
-    metaViewport.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover";
-    head.appendChild(metaViewport);
-
-    const style = document.createElement('style');
-    style.innerHTML = fontStyle;
-    head.appendChild(style);
-
     const initAuth = async () => {
       try {
         await signInAnonymously(auth);
@@ -900,209 +921,51 @@ function PackingListView({ tripId, items }) {
 // --- 視圖組件: 代辦事項 ---
 function TodoListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
-  const handleAdd = async (e) => {
+
+  const handleAddTodo = async (e) => {
     e.preventDefault(); if (!newItem.trim()) return;
     await addDoc(collection(db, 'trips', tripId, 'todo'), { task: newItem.trim(), completed: false, createdAt: serverTimestamp() });
     setNewItem('');
   };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-end mb-4">
-        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><ClipboardList className="text-emerald-600" size={32}/> 代辦事項</h2>
-      </div>
-      <form onSubmit={handleAdd} className="flex gap-2 bg-white p-2 rounded-2xl border border-stone-100 shadow-sm">
-        <input type="text" value={newItem} onChange={e=>setNewItem(e.target.value)} placeholder="新增一般代辦事項 (例如: 買網卡、換日幣)..." className="flex-1 p-3 bg-stone-50 rounded-xl outline-none" />
-        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl"><Plus size={24}/></button>
+      <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3">
+        <ClipboardList className="text-emerald-600" size={32}/> 代辦事項
+      </h2>
+      <form onSubmit={handleAddTodo} className="flex gap-2 bg-white p-2 rounded-2xl border border-stone-100 shadow-sm">
+        <input 
+          type="text" 
+          value={newItem} 
+          onChange={e=>setNewItem(e.target.value)} 
+          placeholder="新增一般代辦事項 (例如: 買網卡、換日幣)..." 
+          className="flex-1 p-3 bg-stone-50 rounded-xl outline-none text-sm" 
+        />
+        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-700 transition">
+          <Plus size={22}/>
+        </button>
       </form>
       <div className="space-y-3">
         {items.map(item => (
-          <div key={item.id} className="flex items-center bg-white p-4 rounded-xl border border-stone-100 shadow-sm cursor-pointer" onClick={() => updateDoc(doc(db, 'trips', tripId, 'todo', item.id), { completed: !item.completed })}>
-            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>{item.completed && <CheckCircle2 size={16} className="text-white"/>}</div>
-            <span className={`flex-1 text-lg font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.task}</span>
-            <button type="button" onClick={(e)=>{e.stopPropagation();deleteDoc(doc(db, 'trips', tripId, 'todo', item.id))}} className="text-stone-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
+          <div 
+            key={item.id} 
+            className="bg-white p-4 rounded-xl border border-stone-100 flex items-center shadow-sm cursor-pointer hover:bg-stone-50 transition" 
+            onClick={() => updateDoc(doc(db, 'trips', tripId, 'todo', item.id), { completed: !item.completed })}
+          >
+            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>
+              {item.completed && <CheckCircle2 size={16} className="text-white"/>}
+            </div>
+            <span className={`flex-1 text-base font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.task}</span>
+            <button 
+              type="button" 
+              onClick={(e)=>{e.stopPropagation();deleteDoc(doc(db, 'trips', tripId, 'todo', item.id))}} 
+              className="text-stone-300 hover:text-red-500 p-2"
+            >
+              <Trash2 size={18}/>
+            </button>
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-// --- 視圖組件: 願望清單 ---
-function WishListView({ tripId, items }) {
-  const [newItem, setNewItem] = useState('');
-  const [note, setNote] = useState('');
-  const [cat, setCat] = useState('吃');
-  const [openCategory, setOpenCategory] = useState('吃');
-  const [viewMode, setViewMode] = useState('list');
-  
-  const categories = [
-    { id: '吃', icon: <Utensils size={16}/>, color: 'text-orange-600', bgColor: 'bg-orange-50' },
-    { id: '喝', icon: <Coffee size={16}/>, color: 'text-blue-600', bgColor: 'bg-blue-50' },
-    { id: '玩', icon: <Gamepad2 size={16}/>, color: 'text-green-600', bgColor: 'bg-green-50' },
-    { id: '樂', icon: <Smile size={16}/>, color: 'text-purple-600', bgColor: 'bg-purple-50' },
-    { id: '購', icon: <ShoppingBag size={16}/>, color: 'text-rose-600', bgColor: 'bg-rose-50' }
-  ];
-
-  const handleAdd = async (e) => {
-    e.preventDefault(); 
-    if (!newItem.trim()) return;
-    await addDoc(collection(db, 'trips', tripId, 'wishlist'), { 
-      name: newItem.trim(), 
-      note: note.trim(), 
-      category: cat, 
-      createdAt: serverTimestamp() 
-    });
-    setNewItem('');
-    setNote('');
-    setOpenCategory(cat);
-  };
-
-  return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-center flex-wrap gap-2">
-        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Heart className="text-emerald-600" size={32}/> 願望清單</h2>
-        <div className="flex bg-white p-1 rounded-2xl border border-stone-200 shadow-sm">
-          <button 
-            type="button"
-            onClick={()=>setViewMode('list')}
-            className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition ${viewMode==='list' ? 'bg-emerald-600 text-white shadow-sm' : 'text-stone-500'}`}
-          >
-            摺疊分類檢視
-          </button>
-          <button 
-            type="button"
-            onClick={()=>setViewMode('map')}
-            className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition flex items-center gap-1 ${viewMode==='map' ? 'bg-emerald-600 text-white shadow-sm' : 'text-stone-500'}`}
-          >
-            <Compass size={14}/> 願望熱點分佈
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white p-5 rounded-2xl border border-stone-100 shadow-sm space-y-3">
-        <div className="flex gap-2 overflow-x-auto pb-1 menu-scrollbar">
-          {categories.map(c => (
-            <button 
-              key={c.id} 
-              type="button" 
-              onClick={()=>setCat(c.id)} 
-              className={`px-4 py-2 rounded-full font-bold text-sm transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                cat===c.id ? 'bg-emerald-600 text-white shadow-md' : 'bg-stone-50 text-stone-500 hover:bg-stone-100'
-              }`}
-            >
-              {c.icon} 想{c.id}
-            </button>
-          ))}
-        </div>
-        
-        <form onSubmit={handleAdd} className="space-y-2.5">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input 
-              type="text" 
-              value={newItem} 
-              onChange={e=>setNewItem(e.target.value)} 
-              placeholder={`想${cat}的地點/店家名稱...`} 
-              className="flex-1 p-3 bg-stone-50 rounded-xl outline-none border border-stone-200 focus:border-emerald-500" 
-              required
-            />
-            <input 
-              type="text" 
-              value={note} 
-              onChange={e=>setNote(e.target.value)} 
-              placeholder={`備註內容 (例: 必吃招牌菜、必買藥妝品)`} 
-              className="flex-1 p-3 bg-stone-50 rounded-xl outline-none border border-stone-200 focus:border-emerald-500" 
-            />
-            <button type="submit" className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-1 shadow-md hover:bg-emerald-700 transition">
-              <Plus size={20}/> 新增
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {viewMode === 'map' ? (
-        <div className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-emerald-900 text-base flex items-center gap-1.5">
-              <MapPin size={18} className="text-emerald-600"/> 願望地點分佈匯總
-            </h3>
-            <span className="text-xs text-stone-400 font-bold">點選即可開啟 Google Maps 導覽</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1 menu-scrollbar">
-            {items.length === 0 ? <div className="text-stone-300 text-xs text-center col-span-2 py-8">尚無願望熱點</div> : items.map(item => (
-              <div key={item.id} className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/70 hover:bg-emerald-50/50 transition flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-stone-800 text-sm">{item.name}</span>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.2 rounded font-bold">想{item.category}</span>
-                  </div>
-                  {item.note && <div className="text-xs text-stone-500 mt-1">💡 {item.note}</div>}
-                </div>
-                <a href={getNavigationLink(item.name)} target="_blank" rel="noreferrer" className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-xl transition">
-                  <Navigation size={16}/>
-                </a>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {categories.map(c => {
-            const catItems = items.filter(i => i.category === c.id);
-            const isOpen = openCategory === c.id;
-
-            return (
-              <div key={c.id} className="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden transition-all">
-                <button
-                  type="button"
-                  onClick={() => setOpenCategory(isOpen ? null : c.id)}
-                  className={`w-full flex items-center justify-between p-4 ${c.bgColor} hover:opacity-90 transition`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={c.color}>{c.icon}</span>
-                    <span className="font-bold text-stone-800 text-base">想{c.id}的清單</span>
-                    <span className="bg-white/80 text-stone-600 text-xs font-bold px-2.5 py-0.5 rounded-full ml-1">
-                      {catItems.length}
-                    </span>
-                  </div>
-                  <div className="text-stone-400">
-                    {isOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                  </div>
-                </button>
-
-                {isOpen && (
-                  <div className="p-4 border-t border-stone-100/60 bg-white space-y-2.5 animate-in fade-in duration-200">
-                    {catItems.length === 0 ? (
-                      <div className="text-center py-6 text-stone-300 text-xs font-bold">尚無想{c.id}的內容</div>
-                    ) : (
-                      catItems.map(item => (
-                        <div key={item.id} className="bg-stone-50 p-3.5 rounded-xl border border-stone-100 flex items-center justify-between hover:bg-stone-100/60 transition">
-                          <div className="flex-1 pr-3">
-                            <span className="font-bold text-stone-800 text-sm">{item.name}</span>
-                            {item.note && (
-                              <div className="text-xs text-stone-500 mt-0.5 flex items-center gap-1">
-                                <Tag size={12} className="text-stone-400" />
-                                <span>{item.note}</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <a href={getGoogleMapsLink(item.name)} target="_blank" rel="noreferrer" className="p-2 text-emerald-500 hover:bg-white rounded-lg transition" title="前往 Google 地圖">
-                              <Compass size={18} />
-                            </a>
-                            <button onClick={()=>deleteDoc(doc(db, 'trips', tripId, 'wishlist', item.id))} className="text-stone-300 hover:text-red-500 p-2 transition-colors" title="刪除">
-                              <Trash2 size={16}/>
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -1436,7 +1299,7 @@ function AddMemoModal({ tripId, initialData, onClose }) {
     type: 'memo' 
   }); 
 
-  const sub = async (e) => {
+  const sub = async (e) => { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1489,7 +1352,7 @@ function AddMemoModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 彈窗組件: 新增/編輯行程規劃 (支援日本自駕 Mapcode 查詢) ---
+// --- 彈窗組件: 新增/編輯行程規劃 (支援背景自動偵測 Mapcode 與快捷手動查填) ---
 function AddItineraryModal({ tripId, initialData, onClose }) { 
   const [sightName, setSightName] = useState(initialData?.type !== 'res' ? (initialData?.title || '') : '');
   const [restaurantName, setRestaurantName] = useState(initialData?.type === 'res' ? (initialData?.title || '') : '');
@@ -1497,16 +1360,25 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
   const [endDatetime, setEndDatetime] = useState(initialData?.endDatetime || '');
   const [location, setLocation] = useState(initialData?.location || '');
   const [mapcode, setMapcode] = useState(initialData?.mapcode || '');
+  const [autoLoading, setAutoLoading] = useState(false);
 
-  // 判定是否為日本景點行程 (排除餐廳與非日本地區)
   const isSight = Boolean(sightName.trim()) || (!restaurantName.trim() && !sightName.trim());
-  const isJapanSight = useMemo(() => {
-    return isSight && checkIsJapan(tripId, `${sightName} ${location}`);
-  }, [tripId, sightName, location, isSight]);
 
-  const openMapcodeSearch = () => {
-    const searchUrl = `https://japanmapcode.com/en?fbclid=IwY2xjawVAbuhleHRuA2FlbQIxMABwZG9mBWJyaWQRMUNGcGpZeVFXQWgxNFhCWG9zcnRjBmFwcF9pZBAyMjIwMzkxNzg4MjAwODkyAAEehwRrGcS4LASTEw8Y8V8i6zrj9B9QrjOscP8vB1KEKh0L3Il3MnoheniW0_g_aem_qpTRiNDnG21Sk9xlnvt75Q#google_vignette`;
-    window.open(searchUrl, '_blank');
+  // 快捷手動觸發背景抓取 Mapcode
+  const handleAutoFetchMapcode = async () => {
+    const loc = location.trim() || sightName.trim();
+    if (!loc) {
+      alert("請先填寫景點名稱或地點地址！");
+      return;
+    }
+    setAutoLoading(true);
+    const code = await fetchAutoMapcode(loc);
+    setAutoLoading(false);
+    if (code) {
+      setMapcode(code);
+    } else {
+      alert("未能在日本地圖搜尋到精確座標，請確認地點或手動填入。");
+    }
   };
 
   const sub = async (e) => { 
@@ -1521,13 +1393,19 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
       return;
     }
 
+    let finalMapcode = mapcode.trim();
+    // 只要是景點行程且 Mapcode 留空，若名稱或地點符合日本地區，儲存當下自動在背景算出來儲存
+    if (finalType === 'sight' && !finalMapcode && checkIsJapan(tripId, `${finalTitle} ${location}`)) {
+      finalMapcode = await fetchAutoMapcode(location.trim() || finalTitle);
+    }
+
     const payload = {
       title: finalTitle,
       type: finalType,
       datetime,
       endDatetime,
       location,
-      mapcode: finalType === 'sight' ? mapcode.trim() : ''
+      mapcode: finalType === 'sight' ? finalMapcode : ''
     };
 
     if (initialData?.id) {
@@ -1597,8 +1475,8 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
             <input className={inputClass} placeholder="地點或詳細地址" value={location} onChange={e=>setLocation(e.target.value)} required/>
           </div>
 
-          {/* 🚗 日本自駕專屬：Mapcode 輸入與查詢專區 (只在景點且符合日本行程時顯示) */}
-          {isJapanSight && (
+          {/* 🚗 日本自駕專屬：Mapcode 背景自動讀取與儲存專區 (景點行程專用，排除餐廳) */}
+          {isSight && (
             <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-100 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-indigo-950 flex items-center gap-1">
@@ -1606,21 +1484,22 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
                 </label>
                 <button
                   type="button"
-                  onClick={openMapcodeSearch}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline flex items-center gap-0.5"
-                  title="前往 Japan Mapcode 搜尋此地點"
+                  onClick={handleAutoFetchMapcode}
+                  disabled={autoLoading}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline flex items-center gap-0.5 disabled:opacity-50"
+                  title="根據填寫的地點直接在背景自動帶入 Mapcode"
                 >
-                  🔍 查詢 Mapcode
+                  {autoLoading ? "⚡ 正在轉換中..." : "⚡ 自動由地點取得 Mapcode"}
                 </button>
               </div>
               <input 
                 className="w-full p-2.5 bg-white border border-indigo-200 rounded-xl outline-none text-xs font-mono font-bold text-indigo-900 focus:border-indigo-500" 
-                placeholder="例如: 13 318 318*42 (查到後直接貼上)" 
+                placeholder="留空儲存時若為日本景點將自動取得，亦可直接輸入" 
                 value={mapcode} 
                 onChange={e=>setMapcode(e.target.value)}
               />
               <p className="text-[11px] text-indigo-600 leading-normal">
-                💡 點擊「查詢 Mapcode」開啟官方查碼網站，將查到的號碼貼在上方，首頁即可一鍵複製給車機導航！
+                💡 只要儲存或點擊「自動取得」，系統會在背景直接計算出車機專用 Mapcode，首頁即可一鍵複製！
               </p>
             </div>
           )}
@@ -1883,7 +1762,8 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
     }
   };
 
-  const sub = async (e) => { 
+  const sub = async (e) => 
+  { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1989,7 +1869,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 旅遊工具箱 ---
+// --- 視圖組件: 旅遊工具箱 (實用日語會話手冊) ---
 function ToolsView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">

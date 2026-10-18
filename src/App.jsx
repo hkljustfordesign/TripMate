@@ -40,6 +40,12 @@ const detectCurrency = (id) => {
   return 'TWD'; 
 };
 
+// --- 判定是否為日本地點/行程 ---
+const checkIsJapan = (tripId, textToMatch) => {
+  const text = `${tripId || ''} ${textToMatch || ''}`.toLowerCase();
+  return /japan|tokyo|osaka|kyoto|okinawa|hokkaido|fukuoka|nagoya|nrt|hnd|kix|fuk|日本|東京|大阪|京都|沖繩|北海道|福岡|名古屋|九州/.test(text);
+};
+
 // --- 計算停留時間輔助函式 ---
 const calculateDuration = (start, end) => {
   if (!start || !end) return null;
@@ -374,13 +380,11 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (新增「隨手備忘便籤」手風琴折疊盒) ---
+// --- 視圖組件: 首頁 (展示天氣、自駕 Mapcode 複製小徽章) ---
 function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
   const [openCategory, setOpenCategory] = useState('吃');
   const [weatherData, setWeatherData] = useState({});
-  const [isMemoOpen, setIsMemoOpen] = useState(false); // 首頁備忘錄折疊狀態
-  const [homeMemos, setHomeMemos] = useState([]);
-  const [newMemoInput, setNewMemoInput] = useState('');
+  const [copiedCode, setCopiedCode] = useState(null);
 
   const timelineItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -390,26 +394,11 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
     });
   }, [items]);
 
-  // 監聽首頁專用備忘錄
-  useEffect(() => {
-    if (!tripId) return;
-    const unsub = onSnapshot(collection(db, 'trips', tripId, 'home_memos'), (snap) => {
-      const memos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      memos.sort((a, b) => (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0) - (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0));
-      setHomeMemos(memos);
-    }, err => console.error("同步首頁備忘失敗:", err));
-    return () => unsub();
-  }, [tripId]);
-
-  const handleAddHomeMemo = async (e) => {
-    e.preventDefault();
-    if (!newMemoInput.trim()) return;
-    await addDoc(collection(db, 'trips', tripId, 'home_memos'), {
-      content: newMemoInput.trim(),
-      createdAt: serverTimestamp()
-    });
-    setNewMemoInput('');
-    setIsMemoOpen(true);
+  const copyToClipboard = (text) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedCode(text);
+    setTimeout(() => setCopiedCode(null), 2000);
   };
 
   useEffect(() => {
@@ -535,9 +524,9 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
   ];
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-10">
+    <div className="space-y-10 max-w-6xl mx-auto pb-10">
       
-      {/* 1. 置頂快捷卡片：目前與下一站 (Now & Next) */}
+      {/* 置頂快捷卡片：目前與下一站 (Now & Next) */}
       {timelineItems.length > 0 && (
         <section className="bg-gradient-to-br from-emerald-900 via-teal-950 to-stone-900 rounded-[32px] p-6 text-white shadow-xl relative overflow-hidden border border-emerald-800/40">
           <div className="flex items-center justify-between mb-5 border-b border-white/10 pb-3">
@@ -649,72 +638,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
         </section>
       )}
 
-      {/* 🌟 2. 首頁隨手備忘便籤 (位於即時動態與時間軸之間，可展開／收合) 🌟 */}
-      <section className="bg-white rounded-2xl shadow-sm border border-amber-200/90 overflow-hidden transition-all">
-        <button
-          type="button"
-          onClick={() => setIsMemoOpen(!isMemoOpen)}
-          className="w-full flex items-center justify-between p-4 bg-amber-50 hover:bg-amber-100/60 transition"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-base">📌</span>
-            <span className="font-bold text-amber-950 text-base">隨手備忘便籤</span>
-            <span className="bg-white text-amber-900 text-xs font-bold px-2.5 py-0.5 rounded-full border border-amber-200">
-              {homeMemos.length}
-            </span>
-            <span className="text-xs text-amber-700/80 hidden sm:inline">（點擊展開／收合，隨手記文字）</span>
-          </div>
-          <div className="text-amber-800">
-            {isMemoOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-          </div>
-        </button>
-
-        {isMemoOpen && (
-          <div className="p-4 border-t border-amber-100 bg-white space-y-3 animate-in fade-in duration-200">
-            {/* 新增備忘輸入框 */}
-            <form onSubmit={handleAddHomeMemo} className="flex gap-2">
-              <input
-                type="text"
-                value={newMemoInput}
-                onChange={e => setNewMemoInput(e.target.value)}
-                placeholder="在此輸入臨時文字資訊、日語句子或飯店地址..."
-                className="flex-1 p-2.5 bg-stone-50 border border-stone-200 rounded-xl outline-none text-[13px] text-stone-800 focus:border-amber-500"
-              />
-              <button
-                type="submit"
-                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-sm transition"
-              >
-                <Plus size={16}/> 新增
-              </button>
-            </form>
-
-            {/* 備忘清單卡片 (字體微縮小2號，換行防破版) */}
-            <div className="space-y-2 max-h-60 overflow-y-auto menu-scrollbar pr-1">
-              {homeMemos.length === 0 ? (
-                <div className="text-center py-4 text-stone-300 text-xs font-bold">
-                  尚無備忘紀錄，快在上方新增隨手筆記吧！
-                </div>
-              ) : homeMemos.map(memo => (
-                <div key={memo.id} className="p-3 bg-amber-50/50 rounded-xl border border-amber-100 flex items-start justify-between gap-3">
-                  <p className="flex-1 text-[13px] leading-relaxed text-stone-800 font-sans whitespace-pre-wrap break-words">
-                    {memo.content}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => deleteDoc(doc(db, 'trips', tripId, 'home_memos', memo.id))}
-                    className="text-stone-300 hover:text-red-500 p-1 transition flex-shrink-0"
-                    title="刪除"
-                  >
-                    <Trash2 size={15}/>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* 3. 旅程時間軸 */}
+      {/* 旅程時間軸 (含 Mapcode 備註展示與一鍵複製按鈕) */}
       <section>
         <h2 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3 mb-6">
           <Home className="text-emerald-600" size={32}/> 旅程時間軸
@@ -753,7 +677,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                       <div className="bg-emerald-800 text-white font-mono font-bold text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-emerald-700">
                         <Calendar size={12} className="text-emerald-300"/>
                         <span>{currentDate}</span>
-                        <span className="bg-emerald-600 text-emerald-100 px-2 py-0.2 rounded-full text-[10px]">
+                        <span className="bg-emerald-600/80 text-emerald-100 px-2 py-0.2 rounded-full text-[10px]">
                           {dayLabel}
                         </span>
                       </div>
@@ -765,10 +689,10 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                     isMemo ? 'bg-amber-500' : isTransport ? 'bg-blue-500' : isAccommodation ? 'bg-indigo-500' : isRestaurant ? 'bg-orange-500' : 'bg-emerald-500'
                   }`}></div>
                   <div className={`p-5 rounded-2xl shadow-sm border transition-all ${
-                    isMemo ? 'bg-amber-50 border-amber-200' : 
-                    isTransport ? 'bg-blue-50 border-blue-100' : 
-                    isAccommodation ? 'bg-indigo-50 border-indigo-100' : 
-                    isRestaurant ? 'bg-orange-50 border-orange-100' : 'bg-white border-stone-100'
+                    isMemo ? 'bg-amber-50/70 border-amber-200' : 
+                    isTransport ? 'bg-blue-50/40 border-blue-100' : 
+                    isAccommodation ? 'bg-indigo-50/40 border-indigo-100' : 
+                    isRestaurant ? 'bg-orange-50/40 border-orange-100' : 'bg-white border-stone-100'
                   }`}>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <Icon size={14} className={
@@ -820,7 +744,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                     </div>
 
                     {isTransport && (
-                      <div className="mt-3 pt-2.5 border-t border-blue-100 flex flex-wrap gap-2 text-xs">
+                      <div className="mt-3 pt-2.5 border-t border-blue-100/60 flex flex-wrap gap-2 text-xs">
                         {item.originDest && (
                           <span className="bg-white text-blue-700 font-bold px-2.5 py-1 rounded-lg border border-blue-200 flex items-center gap-1">
                             <ArrowRightLeft size={12} className="text-blue-500"/> {item.originDest}
@@ -839,7 +763,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                       <div className="mt-2.5">
                         <button
                           onClick={() => onPreviewAttachment && onPreviewAttachment(item.attachment)}
-                          className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                          className="px-3 py-1.5 bg-emerald-100/80 hover:bg-emerald-200 text-emerald-900 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
                         >
                           <span>🎫</span> 快速出示憑證／條碼
                         </button>
@@ -847,9 +771,24 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                     )}
 
                     {!isMemo && !isTransport && item.location && (
-                      <div className="text-sm text-stone-600 mt-2 flex items-center gap-1">
-                        <MapPin size={14}/> {item.location} 
-                        <a href={getGoogleMapsLink(item.location)} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 font-bold hover:underline">地圖</a>
+                      <div className="text-sm text-stone-600 mt-2 flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1">
+                          <MapPin size={14}/> {item.location} 
+                          <a href={getGoogleMapsLink(item.location)} target="_blank" rel="noreferrer" className="ml-1 text-blue-600 font-bold hover:underline">地圖</a>
+                        </div>
+
+                        {/* 🚗 日本自駕專用 Mapcode 徽章 (支援一鍵複製) */}
+                        {item.mapcode && (
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(item.mapcode)}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1 transition active:scale-95 shadow-xs"
+                            title="點擊複製 Mapcode 到剪貼簿"
+                          >
+                            <span>🚗 Mapcode: {item.mapcode}</span>
+                            <span className="text-[10px] text-indigo-500">{copiedCode === item.mapcode ? '已複製！' : '複製'}</span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -860,7 +799,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
         </div>
       </section>
 
-      {/* 4. 願望清單折疊手風琴區塊 */}
+      {/* 願望清單折疊手風琴區塊 */}
       <section className="pt-8 border-t border-stone-200">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3">
@@ -884,7 +823,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                   <div className="flex items-center gap-2">
                     <span className={cat.color}>{cat.icon}</span>
                     <span className="font-bold text-stone-800 text-lg">想{cat.id}的</span>
-                    <span className="bg-white text-stone-600 text-xs font-bold px-2.5 py-0.5 rounded-full ml-1">
+                    <span className="bg-white/80 text-stone-600 text-xs font-bold px-2.5 py-0.5 rounded-full ml-1">
                       {catItems.length}
                     </span>
                   </div>
@@ -894,13 +833,13 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                 </button>
 
                 {isOpen && (
-                  <div className="p-4 border-t border-stone-100 bg-white space-y-3 animate-in fade-in duration-200">
+                  <div className="p-4 border-t border-stone-100/60 bg-white space-y-3 animate-in fade-in duration-200">
                     {catItems.length === 0 ? (
                       <div className="text-center py-6 text-stone-300 text-xs font-bold">尚無願望紀錄</div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                         {catItems.map(item => (
-                          <div key={item.id} className="bg-stone-50 rounded-2xl p-3.5 border border-stone-200 flex flex-col justify-between hover:bg-stone-100 transition">
+                          <div key={item.id} className="bg-stone-50 rounded-2xl p-3.5 border border-stone-200/60 flex flex-col justify-between hover:bg-stone-100/60 transition">
                             <div>
                               <h4 className="font-bold text-stone-800 text-sm truncate mb-1">{item.name}</h4>
                               {item.note && (
@@ -961,51 +900,209 @@ function PackingListView({ tripId, items }) {
 // --- 視圖組件: 代辦事項 ---
 function TodoListView({ tripId, items }) {
   const [newItem, setNewItem] = useState('');
-
-  const handleAddTodo = async (e) => {
+  const handleAdd = async (e) => {
     e.preventDefault(); if (!newItem.trim()) return;
     await addDoc(collection(db, 'trips', tripId, 'todo'), { task: newItem.trim(), completed: false, createdAt: serverTimestamp() });
     setNewItem('');
   };
-
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3">
-        <ClipboardList className="text-emerald-600" size={32}/> 代辦事項
-      </h2>
-      <form onSubmit={handleAddTodo} className="flex gap-2 bg-white p-2 rounded-2xl border border-stone-100 shadow-sm">
-        <input 
-          type="text" 
-          value={newItem} 
-          onChange={e=>setNewItem(e.target.value)} 
-          placeholder="新增一般代辦事項 (例如: 買網卡、換日幣)..." 
-          className="flex-1 p-3 bg-stone-50 rounded-xl outline-none text-sm" 
-        />
-        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-700 transition">
-          <Plus size={22}/>
-        </button>
+      <div className="flex justify-between items-end mb-4">
+        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><ClipboardList className="text-emerald-600" size={32}/> 代辦事項</h2>
+      </div>
+      <form onSubmit={handleAdd} className="flex gap-2 bg-white p-2 rounded-2xl border border-stone-100 shadow-sm">
+        <input type="text" value={newItem} onChange={e=>setNewItem(e.target.value)} placeholder="新增一般代辦事項 (例如: 買網卡、換日幣)..." className="flex-1 p-3 bg-stone-50 rounded-xl outline-none" />
+        <button type="submit" className="bg-emerald-600 text-white p-3 rounded-xl"><Plus size={24}/></button>
       </form>
       <div className="space-y-3">
         {items.map(item => (
-          <div 
-            key={item.id} 
-            className="bg-white p-4 rounded-xl border border-stone-100 flex items-center shadow-sm cursor-pointer hover:bg-stone-50 transition" 
-            onClick={() => updateDoc(doc(db, 'trips', tripId, 'todo', item.id), { completed: !item.completed })}
-          >
-            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>
-              {item.completed && <CheckCircle2 size={16} className="text-white"/>}
-            </div>
-            <span className={`flex-1 text-base font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.task}</span>
-            <button 
-              type="button" 
-              onClick={(e)=>{e.stopPropagation();deleteDoc(doc(db, 'trips', tripId, 'todo', item.id))}} 
-              className="text-stone-300 hover:text-red-500 p-2"
-            >
-              <Trash2 size={18}/>
-            </button>
+          <div key={item.id} className="flex items-center bg-white p-4 rounded-xl border border-stone-100 shadow-sm cursor-pointer" onClick={() => updateDoc(doc(db, 'trips', tripId, 'todo', item.id), { completed: !item.completed })}>
+            <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition ${item.completed ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>{item.completed && <CheckCircle2 size={16} className="text-white"/>}</div>
+            <span className={`flex-1 text-lg font-medium ${item.completed ? 'line-through text-stone-400' : 'text-stone-800'}`}>{item.task}</span>
+            <button type="button" onClick={(e)=>{e.stopPropagation();deleteDoc(doc(db, 'trips', tripId, 'todo', item.id))}} className="text-stone-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// --- 視圖組件: 願望清單 ---
+function WishListView({ tripId, items }) {
+  const [newItem, setNewItem] = useState('');
+  const [note, setNote] = useState('');
+  const [cat, setCat] = useState('吃');
+  const [openCategory, setOpenCategory] = useState('吃');
+  const [viewMode, setViewMode] = useState('list');
+  
+  const categories = [
+    { id: '吃', icon: <Utensils size={16}/>, color: 'text-orange-600', bgColor: 'bg-orange-50' },
+    { id: '喝', icon: <Coffee size={16}/>, color: 'text-blue-600', bgColor: 'bg-blue-50' },
+    { id: '玩', icon: <Gamepad2 size={16}/>, color: 'text-green-600', bgColor: 'bg-green-50' },
+    { id: '樂', icon: <Smile size={16}/>, color: 'text-purple-600', bgColor: 'bg-purple-50' },
+    { id: '購', icon: <ShoppingBag size={16}/>, color: 'text-rose-600', bgColor: 'bg-rose-50' }
+  ];
+
+  const handleAdd = async (e) => {
+    e.preventDefault(); 
+    if (!newItem.trim()) return;
+    await addDoc(collection(db, 'trips', tripId, 'wishlist'), { 
+      name: newItem.trim(), 
+      note: note.trim(), 
+      category: cat, 
+      createdAt: serverTimestamp() 
+    });
+    setNewItem('');
+    setNote('');
+    setOpenCategory(cat);
+  };
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <div className="flex justify-between items-center flex-wrap gap-2">
+        <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3"><Heart className="text-emerald-600" size={32}/> 願望清單</h2>
+        <div className="flex bg-white p-1 rounded-2xl border border-stone-200 shadow-sm">
+          <button 
+            type="button"
+            onClick={()=>setViewMode('list')}
+            className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition ${viewMode==='list' ? 'bg-emerald-600 text-white shadow-sm' : 'text-stone-500'}`}
+          >
+            摺疊分類檢視
+          </button>
+          <button 
+            type="button"
+            onClick={()=>setViewMode('map')}
+            className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition flex items-center gap-1 ${viewMode==='map' ? 'bg-emerald-600 text-white shadow-sm' : 'text-stone-500'}`}
+          >
+            <Compass size={14}/> 願望熱點分佈
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white p-5 rounded-2xl border border-stone-100 shadow-sm space-y-3">
+        <div className="flex gap-2 overflow-x-auto pb-1 menu-scrollbar">
+          {categories.map(c => (
+            <button 
+              key={c.id} 
+              type="button" 
+              onClick={()=>setCat(c.id)} 
+              className={`px-4 py-2 rounded-full font-bold text-sm transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                cat===c.id ? 'bg-emerald-600 text-white shadow-md' : 'bg-stone-50 text-stone-500 hover:bg-stone-100'
+              }`}
+            >
+              {c.icon} 想{c.id}
+            </button>
+          ))}
+        </div>
+        
+        <form onSubmit={handleAdd} className="space-y-2.5">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input 
+              type="text" 
+              value={newItem} 
+              onChange={e=>setNewItem(e.target.value)} 
+              placeholder={`想${cat}的地點/店家名稱...`} 
+              className="flex-1 p-3 bg-stone-50 rounded-xl outline-none border border-stone-200 focus:border-emerald-500" 
+              required
+            />
+            <input 
+              type="text" 
+              value={note} 
+              onChange={e=>setNote(e.target.value)} 
+              placeholder={`備註內容 (例: 必吃招牌菜、必買藥妝品)`} 
+              className="flex-1 p-3 bg-stone-50 rounded-xl outline-none border border-stone-200 focus:border-emerald-500" 
+            />
+            <button type="submit" className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-1 shadow-md hover:bg-emerald-700 transition">
+              <Plus size={20}/> 新增
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {viewMode === 'map' ? (
+        <div className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-emerald-900 text-base flex items-center gap-1.5">
+              <MapPin size={18} className="text-emerald-600"/> 願望地點分佈匯總
+            </h3>
+            <span className="text-xs text-stone-400 font-bold">點選即可開啟 Google Maps 導覽</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1 menu-scrollbar">
+            {items.length === 0 ? <div className="text-stone-300 text-xs text-center col-span-2 py-8">尚無願望熱點</div> : items.map(item => (
+              <div key={item.id} className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200/70 hover:bg-emerald-50/50 transition flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-stone-800 text-sm">{item.name}</span>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.2 rounded font-bold">想{item.category}</span>
+                  </div>
+                  {item.note && <div className="text-xs text-stone-500 mt-1">💡 {item.note}</div>}
+                </div>
+                <a href={getNavigationLink(item.name)} target="_blank" rel="noreferrer" className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-xl transition">
+                  <Navigation size={16}/>
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {categories.map(c => {
+            const catItems = items.filter(i => i.category === c.id);
+            const isOpen = openCategory === c.id;
+
+            return (
+              <div key={c.id} className="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden transition-all">
+                <button
+                  type="button"
+                  onClick={() => setOpenCategory(isOpen ? null : c.id)}
+                  className={`w-full flex items-center justify-between p-4 ${c.bgColor} hover:opacity-90 transition`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={c.color}>{c.icon}</span>
+                    <span className="font-bold text-stone-800 text-base">想{c.id}的清單</span>
+                    <span className="bg-white/80 text-stone-600 text-xs font-bold px-2.5 py-0.5 rounded-full ml-1">
+                      {catItems.length}
+                    </span>
+                  </div>
+                  <div className="text-stone-400">
+                    {isOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div className="p-4 border-t border-stone-100/60 bg-white space-y-2.5 animate-in fade-in duration-200">
+                    {catItems.length === 0 ? (
+                      <div className="text-center py-6 text-stone-300 text-xs font-bold">尚無想{c.id}的內容</div>
+                    ) : (
+                      catItems.map(item => (
+                        <div key={item.id} className="bg-stone-50 p-3.5 rounded-xl border border-stone-100 flex items-center justify-between hover:bg-stone-100/60 transition">
+                          <div className="flex-1 pr-3">
+                            <span className="font-bold text-stone-800 text-sm">{item.name}</span>
+                            {item.note && (
+                              <div className="text-xs text-stone-500 mt-0.5 flex items-center gap-1">
+                                <Tag size={12} className="text-stone-400" />
+                                <span>{item.note}</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <a href={getGoogleMapsLink(item.name)} target="_blank" rel="noreferrer" className="p-2 text-emerald-500 hover:bg-white rounded-lg transition" title="前往 Google 地圖">
+                              <Compass size={18} />
+                            </a>
+                            <button onClick={()=>deleteDoc(doc(db, 'trips', tripId, 'wishlist', item.id))} className="text-stone-300 hover:text-red-500 p-2 transition-colors" title="刪除">
+                              <Trash2 size={16}/>
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1097,7 +1194,7 @@ function ItineraryView({ tripId, items }) {
       </div>
 
       {/* ☔ 雨天備案與備選庫 */}
-      <div className="bg-gradient-to-r from-teal-50 to-emerald-50 rounded-2xl border border-teal-200 p-4 shadow-sm">
+      <div className="bg-gradient-to-r from-teal-50 to-emerald-50 rounded-2xl border border-teal-200/80 p-4 shadow-sm">
         <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowPool(!showPool)}>
           <div className="flex items-center gap-2">
             <span className="p-2 bg-teal-500 text-white rounded-xl shadow-sm text-sm">
@@ -1109,7 +1206,7 @@ function ItineraryView({ tripId, items }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="bg-teal-200 text-teal-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
+            <span className="bg-teal-200/80 text-teal-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
               {unscheduledPool.length} 個候補
             </span>
             {showPool ? <ChevronUp size={18} className="text-teal-700"/> : <ChevronDown size={18} className="text-teal-700"/>}
@@ -1117,9 +1214,9 @@ function ItineraryView({ tripId, items }) {
         </div>
 
         {showPool && (
-          <div className="mt-4 pt-3 border-t border-teal-200 space-y-2.5">
+          <div className="mt-4 pt-3 border-t border-teal-200/60 space-y-2.5">
             {unscheduledPool.length === 0 ? (
-              <div className="text-center py-4 text-teal-600 text-xs font-bold">
+              <div className="text-center py-4 text-teal-600/70 text-xs font-bold">
                 目前沒有備選景點。新增行程時「時間欄位留空」即可存入備選庫！
               </div>
             ) : unscheduledPool.map(poolItem => (
@@ -1134,6 +1231,11 @@ function ItineraryView({ tripId, items }) {
                   {poolItem.location && (
                     <div className="text-xs text-stone-400 mt-0.5 flex items-center gap-1">
                       <MapPin size={10}/> {poolItem.location}
+                    </div>
+                  )}
+                  {poolItem.mapcode && (
+                    <div className="text-xs text-indigo-600 font-mono font-bold mt-0.5">
+                      🚗 Mapcode: {poolItem.mapcode}
                     </div>
                   )}
                 </div>
@@ -1181,7 +1283,7 @@ function ItineraryView({ tripId, items }) {
                 const isRestaurant = item.type === 'res';
                 return (
                   <div key={item.id} className="relative">
-                    <div className="flex items-start gap-3 p-4 bg-stone-50 rounded-2xl border border-stone-200">
+                    <div className="flex items-start gap-3 p-4 bg-stone-50 rounded-2xl border border-stone-200/80">
                       <div className={`w-7 h-7 rounded-full text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5 ${isRestaurant ? 'bg-orange-500' : 'bg-emerald-600'}`}>
                         {idx + 1}
                       </div>
@@ -1230,18 +1332,18 @@ function ItineraryView({ tripId, items }) {
             <div 
               key={item.id} 
               className={`p-5 rounded-2xl shadow-sm border flex justify-between items-center mb-3 transition-all ${
-                isMemo ? 'bg-amber-50 border-amber-200' : 
-                isRestaurant ? 'bg-orange-50 border-orange-100' : 'bg-white border-stone-100'
+                isMemo ? 'bg-amber-50/70 border-amber-200' : 
+                isRestaurant ? 'bg-orange-50/40 border-orange-100' : 'bg-white border-stone-100'
               }`}
             >
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   {isMemo ? (
-                    <span className="text-xs font-bold text-amber-700 uppercase bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <span className="text-xs font-bold text-amber-700 uppercase bg-amber-100/70 px-2 py-0.5 rounded-md flex items-center gap-1">
                       <StickyNote size={12}/> 備忘註記
                     </span>
                   ) : isRestaurant ? (
-                    <span className="text-xs font-bold text-orange-700 uppercase bg-orange-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <span className="text-xs font-bold text-orange-700 uppercase bg-orange-100/70 px-2 py-0.5 rounded-md flex items-center gap-1">
                       <Utensils size={12}/> RES
                     </span>
                   ) : (
@@ -1268,8 +1370,15 @@ function ItineraryView({ tripId, items }) {
                   ) : '未定時間'}
                 </div>
                 {!isMemo && item.location && (
-                  <div className="text-sm text-stone-500 mt-1 flex items-center gap-1">
-                    <MapPin size={12}/> {item.location}
+                  <div className="text-sm text-stone-500 mt-1 flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1">
+                      <MapPin size={12}/> {item.location}
+                    </div>
+                    {item.mapcode && (
+                      <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded text-xs font-mono font-bold">
+                        🚗 Mapcode: {item.mapcode}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -1327,8 +1436,7 @@ function AddMemoModal({ tripId, initialData, onClose }) {
     type: 'memo' 
   }); 
 
-  const sub = async (e) => 
-  { 
+  const sub = async (e) => {
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1381,13 +1489,25 @@ function AddMemoModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 彈窗組件: 新增/編輯行程規劃 ---
+// --- 彈窗組件: 新增/編輯行程規劃 (支援日本自駕 Mapcode 查詢) ---
 function AddItineraryModal({ tripId, initialData, onClose }) { 
   const [sightName, setSightName] = useState(initialData?.type !== 'res' ? (initialData?.title || '') : '');
   const [restaurantName, setRestaurantName] = useState(initialData?.type === 'res' ? (initialData?.title || '') : '');
   const [datetime, setDatetime] = useState(initialData?.datetime || '');
   const [endDatetime, setEndDatetime] = useState(initialData?.endDatetime || '');
   const [location, setLocation] = useState(initialData?.location || '');
+  const [mapcode, setMapcode] = useState(initialData?.mapcode || '');
+
+  // 判定是否為日本景點行程 (排除餐廳與非日本地區)
+  const isSight = Boolean(sightName.trim()) || (!restaurantName.trim() && !sightName.trim());
+  const isJapanSight = useMemo(() => {
+    return isSight && checkIsJapan(tripId, `${sightName} ${location}`);
+  }, [tripId, sightName, location, isSight]);
+
+  const openMapcodeSearch = () => {
+    const searchUrl = `https://japanmapcode.com/en?fbclid=IwY2xjawVAbuhleHRuA2FlbQIxMABwZG9mBWJyaWQRMUNGcGpZeVFXQWgxNFhCWG9zcnRjBmFwcF9pZBAyMjIwMzkxNzg4MjAwODkyAAEehwRrGcS4LASTEw8Y8V8i6zrj9B9QrjOscP8vB1KEKh0L3Il3MnoheniW0_g_aem_qpTRiNDnG21Sk9xlnvt75Q#google_vignette`;
+    window.open(searchUrl, '_blank');
+  };
 
   const sub = async (e) => { 
     e.preventDefault(); 
@@ -1406,7 +1526,8 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
       type: finalType,
       datetime,
       endDatetime,
-      location
+      location,
+      mapcode: finalType === 'sight' ? mapcode.trim() : ''
     };
 
     if (initialData?.id) {
@@ -1421,7 +1542,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
+      <div className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[92vh] overflow-y-auto menu-scrollbar">
         <h3 className="font-bold text-xl mb-4 text-emerald-900">
           {initialData ? '編輯行程規劃' : '新增行程規劃'}
         </h3>
@@ -1436,7 +1557,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
             </label>
             <input 
               className={inputClass} 
-              placeholder="例如: 淺草寺、晴空塔" 
+              placeholder="例如: 淺草寺、晴空塔、古宇利大橋" 
               value={sightName} 
               onChange={e => {
                 setSightName(e.target.value);
@@ -1475,6 +1596,34 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
             <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">地點 (與地圖導航連動)</label>
             <input className={inputClass} placeholder="地點或詳細地址" value={location} onChange={e=>setLocation(e.target.value)} required/>
           </div>
+
+          {/* 🚗 日本自駕專屬：Mapcode 輸入與查詢專區 (只在景點且符合日本行程時顯示) */}
+          {isJapanSight && (
+            <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-indigo-950 flex items-center gap-1">
+                  <span>🚗</span> 日本租車 GPS Mapcode (自駕專用)
+                </label>
+                <button
+                  type="button"
+                  onClick={openMapcodeSearch}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline flex items-center gap-0.5"
+                  title="前往 Japan Mapcode 搜尋此地點"
+                >
+                  🔍 查詢 Mapcode
+                </button>
+              </div>
+              <input 
+                className="w-full p-2.5 bg-white border border-indigo-200 rounded-xl outline-none text-xs font-mono font-bold text-indigo-900 focus:border-indigo-500" 
+                placeholder="例如: 13 318 318*42 (查到後直接貼上)" 
+                value={mapcode} 
+                onChange={e=>setMapcode(e.target.value)}
+              />
+              <p className="text-[11px] text-indigo-600 leading-normal">
+                💡 點擊「查詢 Mapcode」開啟官方查碼網站，將查到的號碼貼在上方，首頁即可一鍵複製給車機導航！
+              </p>
+            </div>
+          )}
 
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-3 bg-stone-100 rounded-xl font-bold text-stone-600">取消</button>
@@ -1734,8 +1883,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
     }
   };
 
-  const sub = async (e) => 
-  { 
+  const sub = async (e) => { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1841,7 +1989,7 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 旅遊工具箱 (實用日語會話手冊) ---
+// --- 視圖組件: 旅遊工具箱 ---
 function ToolsView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto h-full flex flex-col">

@@ -771,7 +771,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                           <a href={getGoogleMapsLink(item.location)} target="_blank" rel="noreferrer" className="ml-1 text-blue-600 font-bold hover:underline">地圖</a>
                         </div>
 
-                        {/* 🚗 自駕專用 Mapcode 徽章 (支援點擊一鍵複製) */}
+                        {/* 🚗 自駕專用 Mapcode 徽章 (支援點擊一鍵複製，行程、餐廳、住宿通用) */}
                         {item.mapcode && (
                           <button
                             type="button"
@@ -833,7 +833,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                         {catItems.map(item => (
-                          <div key={item.id} className="bg-stone-50 rounded-2xl p-3.5 border border-stone-200/60 flex flex-col justify-between hover:bg-stone-100/60 transition">
+                          <div key={item.id} className="bg-stone-50 rounded-2xl p-3.5 border border-stone-200/60 flex flex-col justify-between hover:bg-stone-100 transition">
                             <div>
                               <h4 className="font-bold text-stone-800 text-sm truncate mb-1">{item.name}</h4>
                               {item.note && (
@@ -1483,7 +1483,7 @@ function AddMemoModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 彈窗組件: 新增/編輯行程規劃 (不分景點或餐廳，皆常駐 Mapcode 欄位) ---
+// --- 彈窗組件: 新增/編輯行程規劃 (支援自駕 Mapcode 欄位) ---
 function AddItineraryModal({ tripId, initialData, onClose }) { 
   const [sightName, setSightName] = useState(initialData?.type !== 'res' ? (initialData?.title || '') : '');
   const [restaurantName, setRestaurantName] = useState(initialData?.type === 'res' ? (initialData?.title || '') : '');
@@ -1510,7 +1510,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
       datetime,
       endDatetime,
       location,
-      mapcode: mapcode.trim() // 儲存手動填入的 Mapcode
+      mapcode: mapcode.trim()
     };
 
     if (initialData?.id) {
@@ -1580,7 +1580,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
             <input className={inputClass} placeholder="地點或詳細地址" value={location} onChange={e=>setLocation(e.target.value)} required/>
           </div>
 
-          {/* 🚗 日本自駕專屬：Mapcode 常駐輸入欄位 (景點、餐廳皆支援) */}
+          {/* 🚗 自駕專屬：Mapcode 常駐輸入欄位 */}
           <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-100 space-y-1.5">
             <label className="block text-xs font-bold text-indigo-950 flex items-center gap-1">
               <span>🚗</span> GPS Mapcode (自駕導航專用，選填)
@@ -1592,7 +1592,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
               onChange={e=>setMapcode(e.target.value)}
             />
             <p className="text-[11px] text-indigo-600 leading-normal">
-              💡 輸入後將隨附在首頁與時間軸中，並提供一鍵複製按鈕，方便日本租車輸入車機導航！
+              💡 輸入後將隨附在首頁與時間軸中，並提供一鍵複製按鈕，方便租車自駕輸入車機導航！
             </p>
           </div>
 
@@ -1693,8 +1693,7 @@ function AddTransportModal({ tripId, initialData, onClose }) {
     }
   };
 
-  const sub = async (e) => 
-  { 
+  const sub = async (e) => { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -1765,11 +1764,19 @@ function AddTransportModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 視圖組件: 住宿登錄 ---
+// --- 視圖組件: 住宿登錄 (支援 Mapcode 展示與複製) ---
 function AccommodationView({ tripId, items, onPreviewAttachment }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(null);
   const aItems = items.filter(i=>i.type==='accommodation');
+
+  const copyToClipboard = (text) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedCode(text);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
 
   const handleOpenEdit = (item) => {
     setEditingItem(item);
@@ -1791,7 +1798,22 @@ function AccommodationView({ tripId, items, onPreviewAttachment }) {
         <div key={i.id} className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex justify-between items-center mb-4">
           <div className="flex-1">
             <div className="font-bold text-xl text-stone-800 mb-1">{i.title}</div>
-            <div className="text-sm text-stone-500 mb-3 flex items-center gap-1"><MapPin size={14}/> {i.location} <a href={getGoogleMapsLink(i.location)} target="_blank" rel="noreferrer" className="ml-2 text-blue-500 font-bold hover:underline text-xs">地圖</a></div>
+            <div className="text-sm text-stone-500 mb-3 flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1">
+                <MapPin size={14}/> {i.location} <a href={getGoogleMapsLink(i.location)} target="_blank" rel="noreferrer" className="ml-1 text-blue-500 font-bold hover:underline text-xs">地圖</a>
+              </div>
+              {i.mapcode && (
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(i.mapcode)}
+                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition active:scale-95 shadow-xs"
+                  title="點擊複製 Mapcode 到剪貼簿"
+                >
+                  <span>🚗 Mapcode: {i.mapcode}</span>
+                  <span className="text-[10px] text-indigo-500 font-sans">{copiedCode === i.mapcode ? '已複製！' : '複製'}</span>
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-stone-50 p-4 rounded-2xl border border-stone-50 shadow-inner">
               <div className="text-xs text-stone-600">
                 <strong>入住時間:</strong> {(i.checkInDatetime || `${i.checkInDate || ''} ${i.checkInTime || ''}`).replace('T', ' ') || '未定時間'}
@@ -1827,12 +1849,13 @@ function AccommodationView({ tripId, items, onPreviewAttachment }) {
   );
 }
 
-// --- 唯一且標準的住宿彈窗 ---
+// --- 唯一且標準的住宿彈窗 (新增 Mapcode 輸入欄位) ---
 function AddAccommodationModal({ tripId, initialData, onClose }) { 
   const [f, setF] = useState({ 
     title: initialData?.title || '', 
     type: 'accommodation', 
     location: initialData?.location || '', 
+    mapcode: initialData?.mapcode || '',
     checkInDatetime: initialData?.checkInDatetime || (initialData?.checkInDate ? `${initialData.checkInDate}T${initialData.checkInTime || '15:00'}` : ''),
     checkOutDatetime: initialData?.checkOutDatetime || (initialData?.checkOutDate ? `${initialData.checkOutDate}T${initialData.checkOutTime || '11:00'}` : ''),
     hasBreakfast: initialData?.hasBreakfast || '否', 
@@ -1858,10 +1881,14 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
   const sub = async (e) => 
   { 
     e.preventDefault(); 
+    const payload = {
+      ...f,
+      mapcode: f.mapcode.trim()
+    };
     if (initialData?.id) {
-      await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
+      await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), payload);
     } else {
-      await addDoc(collection(db, 'trips', tripId, 'items'), { ...f, createdAt: serverTimestamp() });
+      await addDoc(collection(db, 'trips', tripId, 'items'), { ...payload, createdAt: serverTimestamp() });
     }
     onClose(); 
   }; 
@@ -1877,11 +1904,27 @@ function AddAccommodationModal({ tripId, initialData, onClose }) {
         <form onSubmit={sub} className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">住宿名稱</label>
-            <input className={inputClass} placeholder="例如: 濟州島海景飯店" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required />
+            <input className={inputClass} placeholder="例如: 濟州島海景飯店、沖繩喜來登" value={f.title} onChange={e=>setF({...f, title:e.target.value})} required />
           </div>
           <div>
             <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">地址 (與地圖連動)</label>
             <input className={inputClass} placeholder="輸入地址或地點" value={f.location} onChange={e=>setF({...f, location:e.target.value})} required />
+          </div>
+
+          {/* 🚗 住宿自駕 Mapcode 輸入欄位 */}
+          <div className="bg-indigo-50/70 p-3.5 rounded-2xl border border-indigo-100 space-y-1.5">
+            <label className="block text-xs font-bold text-indigo-950 flex items-center gap-1">
+              <span>🚗</span> GPS Mapcode (自駕導航專用，選填)
+            </label>
+            <input 
+              className="w-full p-2.5 bg-white border border-indigo-200 rounded-xl outline-none text-xs font-mono font-bold text-indigo-900 focus:border-indigo-500" 
+              placeholder="例如: 206 096 877*55" 
+              value={f.mapcode} 
+              onChange={e=>setF({...f, mapcode:e.target.value})}
+            />
+            <p className="text-[11px] text-indigo-600 leading-normal">
+              💡 填入後將同步顯示於住宿清單與首頁時間軸，方便自駕直接複製導航回飯店！
+            </p>
           </div>
 
           <div>

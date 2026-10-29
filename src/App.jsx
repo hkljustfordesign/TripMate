@@ -10,7 +10,7 @@ import {
   Briefcase, Gamepad2, Smile, Home, Armchair,
   UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil, Tag, StickyNote,
   Calculator, UserCheck, ArrowRight, Hourglass, ChevronDown, ChevronUp, Radio,
-  ArrowUp, ArrowDown, ExternalLink
+  ArrowUp, ArrowDown, ExternalLink, AlertTriangle
 } from 'lucide-react';
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
@@ -374,7 +374,7 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (展示天氣、自駕 Mapcode 徽章與一鍵複製) ---
+// --- 視圖組件: 首頁 ---
 function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
   const [openCategory, setOpenCategory] = useState('吃');
   const [weatherData, setWeatherData] = useState({});
@@ -833,7 +833,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                         {catItems.map(item => (
-                          <div key={item.id} className="bg-stone-50 rounded-2xl p-3.5 border border-stone-200/60 flex flex-col justify-between hover:bg-stone-100 transition">
+                          <div key={item.id} className="bg-stone-50 rounded-2xl p-3.5 border border-stone-200/60 flex flex-col justify-between hover:bg-stone-100/60 transition">
                             <div>
                               <h4 className="font-bold text-stone-800 text-sm truncate mb-1">{item.name}</h4>
                               {item.note && (
@@ -1483,7 +1483,7 @@ function AddMemoModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 彈窗組件: 新增/編輯行程規劃 (支援自駕 Mapcode 欄位) ---
+// --- 彈窗組件: 新增/編輯行程規劃 (支援 Mapcode 欄位) ---
 function AddItineraryModal({ tripId, initialData, onClose }) { 
   const [sightName, setSightName] = useState(initialData?.type !== 'res' ? (initialData?.title || '') : '');
   const [restaurantName, setRestaurantName] = useState(initialData?.type === 'res' ? (initialData?.title || '') : '');
@@ -1580,7 +1580,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
             <input className={inputClass} placeholder="地點或詳細地址" value={location} onChange={e=>setLocation(e.target.value)} required/>
           </div>
 
-          {/* 🚗 自駕專屬：Mapcode 常駐輸入欄位 */}
+          {/* 🚗 自駕專用：Mapcode 常駐輸入欄位 (景點與餐廳皆可選填) */}
           <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-100 space-y-1.5">
             <label className="block text-xs font-bold text-indigo-950 flex items-center gap-1">
               <span>🚗</span> GPS Mapcode (自駕導航專用，選填)
@@ -1592,7 +1592,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
               onChange={e=>setMapcode(e.target.value)}
             />
             <p className="text-[11px] text-indigo-600 leading-normal">
-              💡 輸入後將隨附在首頁與時間軸中，並提供一鍵複製按鈕，方便租車自駕輸入車機導航！
+              💡 輸入後將隨附在首頁與時間軸中，並提供一鍵複製按鈕，方便日本租車輸入車機導航！
             </p>
           </div>
 
@@ -1849,7 +1849,7 @@ function AccommodationView({ tripId, items, onPreviewAttachment }) {
   );
 }
 
-// --- 唯一且標準的住宿彈窗 (新增 Mapcode 輸入欄位) ---
+// --- 唯一且標準的住宿彈窗 (支援 Mapcode 輸入) ---
 function AddAccommodationModal({ tripId, initialData, onClose }) { 
   const [f, setF] = useState({ 
     title: initialData?.title || '', 
@@ -2193,7 +2193,7 @@ function JapanesePhrases() {
   );
 }
 
-// --- 視圖組件: 記帳分帳 ---
+// --- 視圖組件: 記帳分帳 (新增付款人個別總花費統計，以及新增支出時相同金額防呆確認) ---
 function ExpenseView({ tripId, expenses, members }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
@@ -2205,6 +2205,24 @@ function ExpenseView({ tripId, expenses, members }) {
   const totalTWD = expenses.reduce((sum, item) => {
     return sum + (Number(item.amount) * (rates[item.currency] || 1));
   }, 0);
+
+  // 1. 付款人個別總花費統計 (累計每位付款人實際墊付了多少總金額)
+  const payerTotals = useMemo(() => {
+    const stats = {};
+    expenses.forEach(exp => {
+      const payer = exp.payer || '未具名';
+      const amt = Number(exp.amount) || 0;
+      const rate = rates[exp.currency] || 1;
+      const amtTWD = amt * rate;
+
+      if (!stats[payer]) {
+        stats[payer] = { totalTWD: 0, byCurrency: {} };
+      }
+      stats[payer].totalTWD += amtTWD;
+      stats[payer].byCurrency[exp.currency] = (stats[payer].byCurrency[exp.currency] || 0) + amt;
+    });
+    return stats;
+  }, [expenses]);
 
   const settlementData = useMemo(() => {
     const balances = {};
@@ -2314,6 +2332,32 @@ function ExpenseView({ tripId, expenses, members }) {
         </div>
       </div>
 
+      {/* 💳 付款人個別總花費計算整合看板 */}
+      <div className="bg-white p-5 rounded-3xl border border-emerald-100 shadow-sm">
+        <h3 className="font-bold text-emerald-950 text-sm mb-3 flex items-center gap-2">
+          <CreditCard size={18} className="text-emerald-600"/> 付款人個別墊付總額統計
+        </h3>
+        {Object.keys(payerTotals).length === 0 ? (
+          <div className="text-stone-400 text-xs text-center py-2">尚無記帳支出紀錄</div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {Object.entries(payerTotals).map(([name, stat]) => (
+              <div key={name} className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                <span className="text-xs font-bold text-stone-700 block truncate">{name}</span>
+                <span className="text-base font-bold text-emerald-700 font-mono mt-0.5 block">
+                  NT$ {Math.round(stat.totalTWD).toLocaleString()}
+                </span>
+                <div className="text-[10px] text-stone-400 font-mono mt-1 space-x-1 truncate">
+                  {Object.entries(stat.byCurrency).map(([c, a]) => (
+                    <span key={c}>{c} {Math.round(a).toLocaleString()}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {reportMode ? (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm space-y-4">
@@ -2399,7 +2443,7 @@ function ExpenseView({ tripId, expenses, members }) {
         </div>
       )}
 
-      {showAdd && <AddExpenseModal tripId={tripId} initialData={editingExpense} members={members} onClose={handleCloseModal} />}
+      {showAdd && <AddExpenseModal tripId={tripId} initialData={editingExpense} members={members} existingExpenses={expenses} onClose={handleCloseModal} />}
       {showMembersModal && <MembersManagementModal tripId={tripId} members={members} onClose={()=>setShowMembersModal(false)} />}
     </div>
   );
@@ -2471,8 +2515,8 @@ function MembersManagementModal({ tripId, members, onClose }) {
   );
 }
 
-// --- 彈窗組件: 新增/編輯支出 ---
-function AddExpenseModal({ tripId, initialData, members, onClose }) {
+// --- 彈窗組件: 新增/編輯支出 (含相同金額友善提醒與確認防呆) ---
+function AddExpenseModal({ tripId, initialData, members, existingExpenses = [], onClose }) {
   const defaultCurrency = useMemo(() => detectCurrency(tripId), [tripId]);
   const [f, setF] = useState({
     title: initialData?.title || '',
@@ -2487,6 +2531,9 @@ function AddExpenseModal({ tripId, initialData, members, onClose }) {
       ? initialData.splitDetails 
       : [{ name: '', amount: '' }]
   );
+  
+  // 相同金額確認對話框狀態
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
 
   const handleAddPerson = (name = '') => setManualSplits([...manualSplits, { name, amount: '' }]);
   const handleRemovePerson = (index) => setManualSplits(manualSplits.filter((_, i) => i !== index));
@@ -2496,8 +2543,7 @@ function AddExpenseModal({ tripId, initialData, members, onClose }) {
     setManualSplits(newSplits);
   };
 
-  const sub = async (e) => {
-    e.preventDefault();
+  const executeSave = async () => {
     let finalSplitDetails = [];
     const totalAmount = Number(f.amount);
 
@@ -2533,6 +2579,25 @@ function AddExpenseModal({ tripId, initialData, members, onClose }) {
     onClose();
   };
 
+  const sub = async (e) => {
+    e.preventDefault();
+
+    // 檢查現有支出是否已經有完全相同的幣別與金額 (排除正在編輯的同一筆)
+    const targetAmount = Number(f.amount);
+    const dup = existingExpenses.find(item => 
+      item.id !== initialData?.id && 
+      item.currency === f.currency && 
+      Number(item.amount) === targetAmount
+    );
+
+    if (dup && !duplicateWarning) {
+      setDuplicateWarning(dup);
+      return;
+    }
+
+    await executeSave();
+  };
+
   const inputStyle = "w-full p-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:border-emerald-500 transition-colors";
 
   return (
@@ -2541,11 +2606,42 @@ function AddExpenseModal({ tripId, initialData, members, onClose }) {
         <h3 className="font-bold text-xl mb-4 text-emerald-900 flex items-center gap-2">
           <CreditCard size={24}/> {initialData ? '編輯支出與分攤' : '新增支出與分攤'}
         </h3>
+        
+        {/* ⚠️ 相同金額友善提醒與確認畫面 */}
+        {duplicateWarning && (
+          <div className="mb-4 p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-2 animate-in fade-in">
+            <div className="flex items-center gap-2 text-amber-800 font-bold text-sm">
+              <AlertTriangle size={18} className="text-amber-600 flex-shrink-0"/> 友善提醒：已有相同金額輸入
+            </div>
+            <p className="text-xs text-amber-700 leading-relaxed">
+              系統偵測到您先前已有相同金額的紀錄：<br/>
+              <span className="font-bold text-amber-900">「{duplicateWarning.title}」 {duplicateWarning.currency} {Number(duplicateWarning.amount).toLocaleString()}</span><br/>
+              請確認是否為不同筆消費或重複記帳？
+            </p>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDuplicateWarning(null)}
+                className="flex-1 py-2 bg-white text-stone-600 rounded-xl font-bold text-xs border border-stone-200"
+              >
+                我再檢查一下
+              </button>
+              <button
+                type="button"
+                onClick={executeSave}
+                className="flex-1 py-2 bg-amber-600 text-white rounded-xl font-bold text-xs shadow-sm hover:bg-amber-700"
+              >
+                確認無誤，繼續儲存
+              </button>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={sub} className="space-y-4 overflow-y-auto menu-scrollbar pr-1">
           <div><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">項目名稱</label><input type="text" required placeholder="例如: 飯店餐費、門票" className={inputStyle} value={f.title} onChange={e=>setF({...f, title:e.target.value})}/></div>
           <div className="flex gap-2">
             <div className="w-1/3"><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">幣別</label><select className={inputStyle} value={f.currency} onChange={e=>setF({...f, currency:e.target.value})}><option value="TWD">TWD</option><option value="JPY">JPY</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="KRW">KRW</option><option value="THB">THB</option></select></div>
-            <div className="w-2/3"><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">總金額</label><input type="number" required placeholder="0" className={inputStyle} value={f.amount} onChange={e=>setF({...f, amount:e.target.value})}/></div>
+            <div className="w-2/3"><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">總金額</label><input type="number" required placeholder="0" className={inputStyle} value={f.amount} onChange={e=>{ setF({...f, amount:e.target.value}); setDuplicateWarning(null); }}/></div>
           </div>
 
           <div>

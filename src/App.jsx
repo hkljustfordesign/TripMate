@@ -40,6 +40,41 @@ const detectCurrency = (id) => {
   return 'TWD'; 
 };
 
+// --- 目的地時區自動判定邏輯 ---
+const detectTimeZone = (id, locationText) => {
+  const text = `${id || ''} ${locationText || ''}`.toLowerCase();
+  if (/japan|tokyo|osaka|kyoto|okinawa|hokkaido|fukuoka|nrt|hnd|kix|fuk|日本|東京|大阪|京都|沖繩|北海道|福岡|九州/.test(text)) return 'Asia/Tokyo';
+  if (/korea|seoul|busan|icn|韓國|首爾|釜山/.test(text)) return 'Asia/Seoul';
+  if (/thailand|bangkok|泰國|曼谷/.test(text)) return 'Asia/Bangkok';
+  if (/europe|france|paris|germany|berlin|italy|rome|英國|歐洲|法國|巴黎|德國|柏林|義大利|羅馬/.test(text)) return 'Europe/Paris';
+  if (/usa|america|new york|nyc|美國|紐約/.test(text)) return 'America/New_York';
+  if (/la|sf|los angeles|san francisco|洛杉磯|舊金山/.test(text)) return 'America/Los_Angeles';
+  return 'Asia/Taipei';
+};
+
+// 取得目標時區目前的 Date 物件
+const getDestinationCurrentTime = (timeZone) => {
+  try {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+    const parts = formatter.formatToParts(now);
+    const dateObj = {};
+    parts.forEach(p => { dateObj[p.type] = p.value; });
+    return new Date(`${dateObj.year}-${dateObj.month}-${dateObj.day}T${dateObj.hour}:${dateObj.minute}:${dateObj.second}`);
+  } catch (e) {
+    return new Date();
+  }
+};
+
 // --- 計算停留時間輔助函式 ---
 const calculateDuration = (start, end) => {
   if (!start || !end) return null;
@@ -220,6 +255,7 @@ function TripDashboard({ tripId, userId, onLeave }) {
   const [todoItems, setTodoItems] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
   const [members, setMembers] = useState([]);
+  const [tripSettings, setTripSettings] = useState({});
   const [previewAttachment, setPreviewAttachment] = useState(null);
 
   useEffect(() => {
@@ -253,7 +289,13 @@ function TripDashboard({ tripId, userId, onLeave }) {
       setMembers(snap.docs.map(d => ({id: d.id, ...d.data()})));
     }, err => console.error("同步成員失敗:", err));
 
-    return () => { unsubItems(); unsubExp(); unsubPack(); unsubTodo(); unsubWish(); unsubMembers(); };
+    const unsubTripDoc = onSnapshot(doc(db, 'trips', tripId), (docSnap) => {
+      if (docSnap.exists()) {
+        setTripSettings(docSnap.data());
+      }
+    });
+
+    return () => { unsubItems(); unsubExp(); unsubPack(); unsubTodo(); unsubWish(); unsubMembers(); unsubTripDoc(); };
   }, [tripId, userId]);
 
   return (
@@ -267,11 +309,11 @@ function TripDashboard({ tripId, userId, onLeave }) {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-32">
-          {activeTab === 'home' && <HomeView tripId={tripId} items={items} wishlistItems={wishlistItems} onPreviewAttachment={setPreviewAttachment} />}
+          {activeTab === 'home' && <HomeView tripId={tripId} items={items} wishlistItems={wishlistItems} tripSettings={tripSettings} onPreviewAttachment={setPreviewAttachment} />}
           {activeTab === 'itinerary' && <ItineraryView tripId={tripId} items={items} />}
           {activeTab === 'transport' && <TransportView tripId={tripId} items={items} onPreviewAttachment={setPreviewAttachment} />}
           {activeTab === 'accommodation' && <AccommodationView tripId={tripId} items={items} onPreviewAttachment={setPreviewAttachment} />}
-          {activeTab === 'expense' && <ExpenseView tripId={tripId} expenses={expenses} members={members} />}
+          {activeTab === 'expense' && <ExpenseView tripId={tripId} expenses={expenses} members={members} onPreviewAttachment={setPreviewAttachment} />}
           {activeTab === 'packing' && <PackingListView tripId={tripId} items={packingItems} />}
           {activeTab === 'todo' && <TodoListView tripId={tripId} items={todoItems} />}
           {activeTab === 'wishlist' && <WishListView tripId={tripId} items={wishlistItems} />}
@@ -305,8 +347,8 @@ function AttachmentModal({ attachment, onClose }) {
 
         <div className="w-full text-center mb-4">
           <span className="text-3xl block mb-1">🎫</span>
-          <h3 className="font-bold text-lg text-stone-800">重要票券 / 憑證掃描</h3>
-          <p className="text-xs text-stone-400">請直接出示給工作人員掃描</p>
+          <h3 className="font-bold text-lg text-stone-800">重要票券 / 憑證 / 收據掃描</h3>
+          <p className="text-xs text-stone-400">請直接出示檢閱或供工作人員掃描</p>
         </div>
 
         <div className="flex-1 w-full flex items-center justify-center bg-stone-50 rounded-2xl overflow-hidden p-2 border border-stone-200">
@@ -374,11 +416,14 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 ---
-function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
+// --- 視圖組件: 首頁 (天數折疊、目的地時區偵測、行程結束切換) ---
+function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachment }) {
   const [openCategory, setOpenCategory] = useState('吃');
   const [weatherData, setWeatherData] = useState({});
   const [copiedCode, setCopiedCode] = useState(null);
+  
+  // 手動折疊的日期清單
+  const [collapsedDates, setCollapsedDates] = useState({});
 
   const timelineItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -387,6 +432,12 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
       return timeA.localeCompare(timeB);
     });
   }, [items]);
+
+  // 自動依行程與地點偵測目的地時區
+  const destinationTimeZone = useMemo(() => {
+    const allLocations = timelineItems.map(i => i.location || '').join(' ');
+    return detectTimeZone(tripId, allLocations);
+  }, [tripId, timelineItems]);
 
   const copyToClipboard = (text) => {
     if (!text) return;
@@ -440,10 +491,16 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
     );
   };
 
+  // 取得目標時區之當前時間
+  const currentDestinationTime = useMemo(() => {
+    return getDestinationCurrentTime(destinationTimeZone);
+  }, [destinationTimeZone]);
+
+  // 旅程即時動態比對 (以目的地當地時間為準)
   const { currentItem, nextItem, isTripOver, isTripNotStarted } = useMemo(() => {
     if (timelineItems.length === 0) return { currentItem: null, nextItem: null, isTripOver: false, isTripNotStarted: false };
 
-    const now = new Date();
+    const now = currentDestinationTime;
     let current = null;
     let next = null;
 
@@ -482,7 +539,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
       isTripOver: isOver && !current,
       isTripNotStarted: isNotStarted && !current
     };
-  }, [timelineItems]);
+  }, [timelineItems, currentDestinationTime]);
 
   const uniqueDates = useMemo(() => {
     const dates = timelineItems
@@ -509,6 +566,50 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
     return map;
   }, [uniqueDates]);
 
+  // 判斷某天的行程是否已經全數過期結束（自動收合依據）
+  const isDateCompleted = (dateStr) => {
+    const dayItems = timelineItems.filter(item => {
+      const fullTime = getItemSortTime(item);
+      return fullTime && fullTime.startsWith(dateStr);
+    });
+    if (dayItems.length === 0) return false;
+    const lastItem = dayItems[dayItems.length - 1];
+    const endTimeStr = lastItem.endDatetime || getItemSortTime(lastItem);
+    if (!endTimeStr || endTimeStr.startsWith('9999')) return false;
+    return currentDestinationTime > new Date(endTimeStr);
+  };
+
+  const isCollapsed = (dateStr) => {
+    if (collapsedDates[dateStr] !== undefined) {
+      return collapsedDates[dateStr];
+    }
+    // 若該天行程已過期，預設自動收合
+    return isDateCompleted(dateStr);
+  };
+
+  const toggleDateCollapse = (dateStr) => {
+    setCollapsedDates(prev => ({
+      ...prev,
+      [dateStr]: !isCollapsed(dateStr)
+    }));
+  };
+
+  // 結束本次行程按鈕處理
+  const handleEndTrip = async () => {
+    try {
+      await updateDoc(doc(db, 'trips', tripId), {
+        isManuallyEnded: true
+      });
+    } catch (e) {
+      // 若 trip 文件尚未建立則新增
+      await updateDoc(doc(db, 'trips', tripId), { isManuallyEnded: true }).catch(async () => {
+        await addDoc(collection(db, 'trips'), { id: tripId, isManuallyEnded: true });
+      });
+    }
+  };
+
+  const isTripManuallyEnded = Boolean(tripSettings?.isManuallyEnded);
+
   const wishlistCategories = [
     { id: '吃', icon: <Utensils size={18}/>, color: 'text-orange-600', bgColor: 'bg-orange-50' },
     { id: '喝', icon: <Coffee size={18}/>, color: 'text-blue-600', bgColor: 'bg-blue-50' },
@@ -520,7 +621,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
   return (
     <div className="space-y-10 max-w-6xl mx-auto pb-10">
       
-      {/* 置頂快捷卡片：目前與下一站 (Now & Next) */}
+      {/* 1. 置頂快捷卡片：目前與下一站 (Now & Next) */}
       {timelineItems.length > 0 && (
         <section className="bg-gradient-to-br from-emerald-900 via-teal-950 to-stone-900 rounded-[32px] p-6 text-white shadow-xl relative overflow-hidden border border-emerald-800/40">
           <div className="flex items-center justify-between mb-5 border-b border-white/10 pb-3">
@@ -532,11 +633,17 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
               <h2 className="text-sm font-bold tracking-wider uppercase text-emerald-300">旅程即時動態 • NOW & NEXT</h2>
             </div>
             <div className="text-xs text-stone-300 font-mono font-medium flex items-center gap-1">
-              <Clock size={12}/> 即時同步中
+              <Clock size={12}/> 當地時間校正中 ({destinationTimeZone.split('/')[1] || '當地'})
             </div>
           </div>
 
-          {isTripNotStarted ? (
+          {isTripManuallyEnded ? (
+            <div className="p-6 bg-white/10 rounded-2xl backdrop-blur-md text-center py-8 border border-white/10 space-y-2">
+              <span className="text-3xl block">🌟</span>
+              <h3 className="text-xl font-bold text-white tracking-wide">祝您有個愉快的旅程，期待下次再見 !</h3>
+              <p className="text-xs text-stone-300">本次所有回憶、備忘錄與分帳統計皆已妥善保存。</p>
+            </div>
+          ) : isTripNotStarted ? (
             <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10">
               <div className="text-xs text-emerald-300 font-bold mb-1">📅 旅程準備出發！首站行程：</div>
               <div className="text-lg font-bold text-white mb-2">{timelineItems[0]?.title}</div>
@@ -546,10 +653,17 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
               </div>
             </div>
           ) : isTripOver ? (
-            <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md text-center py-6 border border-white/10">
-              <span className="text-2xl mb-1 block">🎉</span>
-              <h3 className="font-bold text-white text-base">本次旅程已圓滿完成！</h3>
-              <p className="text-xs text-stone-300 mt-1">所有美好回憶與分帳紀錄皆已安全保存。</p>
+            <div className="p-6 bg-white/10 rounded-2xl backdrop-blur-md text-center py-6 border border-white/10 space-y-3">
+              <span className="text-3xl block">🎉</span>
+              <h3 className="font-bold text-white text-lg">本次旅程最後一個排程已完成！</h3>
+              <p className="text-xs text-stone-300">所有精彩行程均已結束，請點擊下方確認結束本次旅程：</p>
+              <button
+                type="button"
+                onClick={handleEndTrip}
+                className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-stone-950 font-bold rounded-xl text-sm transition shadow-lg active:scale-95 mx-auto"
+              >
+                已結束
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -632,11 +746,15 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
         </section>
       )}
 
-      {/* 旅程時間軸 (含 Mapcode 備註展示與一鍵複製按鈕) */}
+      {/* 2. 旅程時間軸 (支援每日自動/手動折疊收合功能) */}
       <section>
-        <h2 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3 mb-6">
-          <Home className="text-emerald-600" size={32}/> 旅程時間軸
-        </h2>
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+          <h2 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3">
+            <Home className="text-emerald-600" size={32}/> 旅程時間軸
+          </h2>
+          <span className="text-xs text-stone-400 font-bold">當日已結束之行程會自動收合，亦可手動點擊切換</span>
+        </div>
+
         <div className="space-y-6 relative">
           <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-emerald-200/50"></div>
           {timelineItems.length === 0 ? <div className="ml-10 p-6 bg-white rounded-2xl text-stone-400 border border-stone-100">尚無行程</div> : 
@@ -662,10 +780,11 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
               const dayLabel = currentDate ? dateDayMap[currentDate] : '';
 
               const durationText = calculateDuration(item.datetime, item.endDatetime);
+              const dayCollapsed = currentDate ? isCollapsed(currentDate) : false;
 
               return (
                 <div key={item.id} className="relative ml-10">
-                  {/* 日期標題 ＋ 天氣資訊串接 */}
+                  {/* 日期標題 ＋ 天氣資訊 ＋ 折疊切換按鈕 */}
                   {isFirstItemOfDay && (
                     <div className="mb-3.5 -ml-8 flex items-center gap-2 z-20 relative flex-wrap">
                       <div className="bg-emerald-800 text-white font-mono font-bold text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-emerald-700">
@@ -676,116 +795,134 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
                         </span>
                       </div>
                       {getWeatherDisplay(currentDate)}
+                      
+                      {/* 當日手動折疊收合按鈕 */}
+                      <button
+                        type="button"
+                        onClick={() => toggleDateCollapse(currentDate)}
+                        className="bg-white hover:bg-stone-100 text-stone-600 border border-stone-200 px-2.5 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1 shadow-xs transition active:scale-95"
+                      >
+                        {dayCollapsed ? (
+                          <><span>展開行程</span><ChevronDown size={12}/></>
+                        ) : (
+                          <><span>收合已完行程</span><ChevronUp size={12}/></>
+                        )}
+                      </button>
                     </div>
                   )}
 
-                  <div className={`absolute -left-[42px] top-4 w-5 h-5 rounded-full border-4 border-white shadow-sm z-10 ${
-                    isMemo ? 'bg-amber-500' : isTransport ? 'bg-blue-500' : isAccommodation ? 'bg-indigo-500' : isRestaurant ? 'bg-orange-500' : 'bg-emerald-500'
-                  }`}></div>
-                  <div className={`p-5 rounded-2xl shadow-sm border transition-all ${
-                    isMemo ? 'bg-amber-50/70 border-amber-200' : 
-                    isTransport ? 'bg-blue-50/40 border-blue-100' : 
-                    isAccommodation ? 'bg-indigo-50/40 border-indigo-100' : 
-                    isRestaurant ? 'bg-orange-50/40 border-orange-100' : 'bg-white border-stone-100'
-                  }`}>
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <Icon size={14} className={
-                        isMemo ? 'text-amber-600' : 
-                        isTransport ? 'text-blue-600' : 
-                        isAccommodation ? 'text-indigo-600' : 
-                        isRestaurant ? 'text-orange-600' : 'text-emerald-600'
-                      }/>
-                      <span className={`text-xs font-bold uppercase tracking-wider ${
-                        isMemo ? 'text-amber-700' : 
-                        isTransport ? 'text-blue-600' : 
-                        isAccommodation ? 'text-indigo-700' : 
-                        isRestaurant ? 'text-orange-700' : 'text-emerald-600'
+                  {/* 若該天收合，則隱藏卡片 */}
+                  {!dayCollapsed && (
+                    <>
+                      <div className={`absolute -left-[42px] top-4 w-5 h-5 rounded-full border-4 border-white shadow-sm z-10 ${
+                        isMemo ? 'bg-amber-500' : isTransport ? 'bg-blue-500' : isAccommodation ? 'bg-indigo-500' : isRestaurant ? 'bg-orange-500' : 'bg-emerald-500'
+                      }`}></div>
+                      <div className={`p-5 rounded-2xl shadow-sm border transition-all ${
+                        isMemo ? 'bg-amber-50/70 border-amber-200' : 
+                        isTransport ? 'bg-blue-50/40 border-blue-100' : 
+                        isAccommodation ? 'bg-indigo-50/40 border-indigo-100' : 
+                        isRestaurant ? 'bg-orange-50/40 border-orange-100' : 'bg-white border-stone-100'
                       }`}>
-                        {isMemo ? '旅遊備忘註記' : isAccommodation ? '住宿登錄' : isRestaurant ? 'RES' : item.type === 'sight' ? 'SIGHT' : item.type}
-                      </span>
-                      {durationText && (
-                        <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-100">
-                          <Hourglass size={10}/> 停留 {durationText}
-                        </span>
-                      )}
-                    </div>
-                    <h3 className={`text-xl font-bold ${isMemo ? 'text-amber-950 font-sans' : 'text-stone-800'}`}>{item.title}</h3>
-                    
-                    <div className={`text-sm font-medium mt-1 flex items-center gap-1 flex-wrap ${
-                      isMemo ? 'text-amber-700' : 
-                      isTransport ? 'text-blue-700' : 
-                      isAccommodation ? 'text-indigo-700 font-bold' : 
-                      isRestaurant ? 'text-orange-700' : 'text-emerald-700'
-                    }`}>
-                      <Clock size={14}/> 
-                      {isAccommodation ? (
-                        <span>
-                          入住: {(item.checkInDatetime || `${item.checkInDate || ''} ${item.checkInTime || ''}`).replace('T', ' ')}
-                          {(item.checkOutDatetime || item.checkOutDate) && (
-                            <span className="text-stone-400 font-normal ml-2">
-                              ➜ 退房: {(item.checkOutDatetime || `${item.checkOutDate || ''} ${item.checkOutTime || ''}`).replace('T', ' ')}
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <Icon size={14} className={
+                            isMemo ? 'text-amber-600' : 
+                            isTransport ? 'text-blue-600' : 
+                            isAccommodation ? 'text-indigo-600' : 
+                            isRestaurant ? 'text-orange-600' : 'text-emerald-600'
+                          }/>
+                          <span className={`text-xs font-bold uppercase tracking-wider ${
+                            isMemo ? 'text-amber-700' : 
+                            isTransport ? 'text-blue-600' : 
+                            isAccommodation ? 'text-indigo-700' : 
+                            isRestaurant ? 'text-orange-700' : 'text-emerald-600'
+                          }`}>
+                            {isMemo ? '旅遊備忘註記' : isAccommodation ? '住宿登錄' : isRestaurant ? 'RES' : item.type === 'sight' ? 'SIGHT' : item.type}
+                          </span>
+                          {durationText && (
+                            <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-100">
+                              <Hourglass size={10}/> 停留 {durationText}
                             </span>
                           )}
-                        </span>
-                      ) : item.datetime ? (
-                        <span>
-                          {item.datetime.replace('T', ' ')}
-                          {item.endDatetime && (
-                            <span className="text-stone-400 font-normal"> ➜ {item.endDatetime.includes('T') ? item.endDatetime.split('T')[1] : item.endDatetime}</span>
-                          )}
-                        </span>
-                      ) : '未定時間'}
-                    </div>
-
-                    {isTransport && (
-                      <div className="mt-3 pt-2.5 border-t border-blue-100/60 flex flex-wrap gap-2 text-xs">
-                        {item.originDest && (
-                          <span className="bg-white text-blue-700 font-bold px-2.5 py-1 rounded-lg border border-blue-200 flex items-center gap-1">
-                            <ArrowRightLeft size={12} className="text-blue-500"/> {item.originDest}
-                          </span>
-                        )}
-                        {item.seat && (
-                          <span className="bg-white text-emerald-700 font-bold px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
-                            <Armchair size={12}/> 座位: {item.seat}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {/* 快速出示憑證截圖 */}
-                    {item.attachment && (
-                      <div className="mt-2.5">
-                        <button
-                          onClick={() => onPreviewAttachment && onPreviewAttachment(item.attachment)}
-                          className="px-3 py-1.5 bg-emerald-100/80 hover:bg-emerald-200 text-emerald-900 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-                        >
-                          <span>🎫</span> 快速出示憑證／條碼
-                        </button>
-                      </div>
-                    )}
-
-                    {!isMemo && !isTransport && item.location && (
-                      <div className="text-sm text-stone-600 mt-2 flex items-center gap-2 flex-wrap">
-                        <div className="flex items-center gap-1">
-                          <MapPin size={14}/> {item.location} 
-                          <a href={getGoogleMapsLink(item.location)} target="_blank" rel="noreferrer" className="ml-1 text-blue-600 font-bold hover:underline">地圖</a>
+                        </div>
+                        <h3 className={`text-xl font-bold ${isMemo ? 'text-amber-950 font-sans' : 'text-stone-800'}`}>{item.title}</h3>
+                        
+                        <div className={`text-sm font-medium mt-1 flex items-center gap-1 flex-wrap ${
+                          isMemo ? 'text-amber-700' : 
+                          isTransport ? 'text-blue-700' : 
+                          isAccommodation ? 'text-indigo-700 font-bold' : 
+                          isRestaurant ? 'text-orange-700' : 'text-emerald-700'
+                        }`}>
+                          <Clock size={14}/> 
+                          {isAccommodation ? (
+                            <span>
+                              入住: {(item.checkInDatetime || `${item.checkInDate || ''} ${item.checkInTime || ''}`).replace('T', ' ')}
+                              {(item.checkOutDatetime || item.checkOutDate) && (
+                                <span className="text-stone-400 font-normal ml-2">
+                                  ➜ 退房: {(item.checkOutDatetime || `${item.checkOutDate || ''} ${item.checkOutTime || ''}`).replace('T', ' ')}
+                                </span>
+                              )}
+                            </span>
+                          ) : item.datetime ? (
+                            <span>
+                              {item.datetime.replace('T', ' ')}
+                              {item.endDatetime && (
+                                <span className="text-stone-400 font-normal"> ➜ {item.endDatetime.includes('T') ? item.endDatetime.split('T')[1] : item.endDatetime}</span>
+                              )}
+                            </span>
+                          ) : '未定時間'}
                         </div>
 
-                        {/* 🚗 自駕專用 Mapcode 徽章 (支援點擊一鍵複製，行程、餐廳、住宿通用) */}
-                        {item.mapcode && (
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(item.mapcode)}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition active:scale-95 shadow-xs"
-                            title="點擊複製 Mapcode 到剪貼簿"
-                          >
-                            <span>🚗 Mapcode: {item.mapcode}</span>
-                            <span className="text-[10px] text-indigo-500 font-sans">{copiedCode === item.mapcode ? '已複製！' : '複製'}</span>
-                          </button>
+                        {isTransport && (
+                          <div className="mt-3 pt-2.5 border-t border-blue-100/60 flex flex-wrap gap-2 text-xs">
+                            {item.originDest && (
+                              <span className="bg-white text-blue-700 font-bold px-2.5 py-1 rounded-lg border border-blue-200 flex items-center gap-1">
+                                <ArrowRightLeft size={12} className="text-blue-500"/> {item.originDest}
+                              </span>
+                            )}
+                            {item.seat && (
+                              <span className="bg-white text-emerald-700 font-bold px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
+                                <Armchair size={12}/> 座位: {item.seat}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 快速出示憑證截圖 */}
+                        {item.attachment && (
+                          <div className="mt-2.5">
+                            <button
+                              onClick={() => onPreviewAttachment && onPreviewAttachment(item.attachment)}
+                              className="px-3 py-1.5 bg-emerald-100/80 hover:bg-emerald-200 text-emerald-900 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                            >
+                              <span>🎫</span> 快速出示憑證／條碼
+                            </button>
+                          </div>
+                        )}
+
+                        {!isMemo && !isTransport && item.location && (
+                          <div className="text-sm text-stone-600 mt-2 flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-1">
+                              <MapPin size={14}/> {item.location} 
+                              <a href={getGoogleMapsLink(item.location)} target="_blank" rel="noreferrer" className="ml-1 text-blue-600 font-bold hover:underline">地圖</a>
+                            </div>
+
+                            {/* 🚗 自駕專用 Mapcode 徽章 (支援點擊一鍵複製，行程、餐廳、住宿通用) */}
+                            {item.mapcode && (
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(item.mapcode)}
+                                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition active:scale-95 shadow-xs"
+                                title="點擊複製 Mapcode 到剪貼簿"
+                              >
+                                <span>🚗 Mapcode: {item.mapcode}</span>
+                                <span className="text-[10px] text-indigo-500 font-sans">{copiedCode === item.mapcode ? '已複製！' : '複製'}</span>
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
+                    </>
+                  )}
                 </div>
               );
             })
@@ -793,7 +930,7 @@ function HomeView({ tripId, items, wishlistItems, onPreviewAttachment }) {
         </div>
       </section>
 
-      {/* 願望清單折疊手風琴區塊 */}
+      {/* 3. 願望清單折疊手風琴區塊 */}
       <section className="pt-8 border-t border-stone-200">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-3xl font-bold text-emerald-900 flex items-center gap-3">
@@ -1580,7 +1717,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
             <input className={inputClass} placeholder="地點或詳細地址" value={location} onChange={e=>setLocation(e.target.value)} required/>
           </div>
 
-          {/* 🚗 自駕專用：Mapcode 常駐輸入欄位 (景點與餐廳皆可選填) */}
+          {/* 🚗 自駕專屬：Mapcode 常駐輸入欄位 */}
           <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-100 space-y-1.5">
             <label className="block text-xs font-bold text-indigo-950 flex items-center gap-1">
               <span>🚗</span> GPS Mapcode (自駕導航專用，選填)
@@ -2062,7 +2199,7 @@ function JapanesePhrases() {
         "持ち帰りはできますか (可以外帶嗎？)",
         "お会計をお願いします (麻煩結帳)",
         "別々に会計できますか (可以分開結帳嗎？)",
-        "ごちそうさまでした (謝謝招待 / 吃飽了)"
+        "ごちそうさ反了 (謝謝招待 / 吃飽了)"
       ]
     },
     "交通 🚗": {
@@ -2193,8 +2330,8 @@ function JapanesePhrases() {
   );
 }
 
-// --- 視圖組件: 記帳分帳 (新增付款人個別總花費統計，以及新增支出時相同金額防呆確認) ---
-function ExpenseView({ tripId, expenses, members }) {
+// --- 視圖組件: 記帳分帳 (新增支出日期、收據憑證上傳、付款人墊付統計看板與相同金額防呆) ---
+function ExpenseView({ tripId, expenses, members, onPreviewAttachment }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
@@ -2206,7 +2343,7 @@ function ExpenseView({ tripId, expenses, members }) {
     return sum + (Number(item.amount) * (rates[item.currency] || 1));
   }, 0);
 
-  // 1. 付款人個別總花費統計 (累計每位付款人實際墊付了多少總金額)
+  // 付款人個別總花費統計
   const payerTotals = useMemo(() => {
     const stats = {};
     expenses.forEach(exp => {
@@ -2332,7 +2469,7 @@ function ExpenseView({ tripId, expenses, members }) {
         </div>
       </div>
 
-      {/* 💳 付款人個別總花費計算整合看板 */}
+      {/* 付款人個別總花費統計看板 */}
       <div className="bg-white p-5 rounded-3xl border border-emerald-100 shadow-sm">
         <h3 className="font-bold text-emerald-950 text-sm mb-3 flex items-center gap-2">
           <CreditCard size={18} className="text-emerald-600"/> 付款人個別墊付總額統計
@@ -2410,9 +2547,25 @@ function ExpenseView({ tripId, expenses, members }) {
             <div key={exp.id} className="p-5 flex flex-col hover:bg-stone-50 transition-colors">
               <div className="flex justify-between items-center mb-2">
                 <div className="flex-1">
-                  <h4 className="font-bold text-stone-800 text-lg">{exp.title}</h4>
-                  <div className="text-xs text-stone-500 mt-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-stone-800 text-lg">{exp.title}</h4>
+                    {exp.expenseDate && (
+                      <span className="text-xs bg-stone-100 text-stone-500 font-mono font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <Calendar size={11} className="text-stone-400"/> {exp.expenseDate}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-stone-500 mt-1 flex items-center gap-2">
                     <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded font-bold">{exp.payer} 付款</span>
+                    {exp.attachment && (
+                      <button
+                        type="button"
+                        onClick={() => onPreviewAttachment && onPreviewAttachment(exp.attachment)}
+                        className="text-emerald-700 bg-emerald-100/80 hover:bg-emerald-200 px-2 py-0.5 rounded font-bold flex items-center gap-1 transition"
+                      >
+                        <span>🧾</span> 查看收據/明細
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-3 text-right">
@@ -2515,14 +2668,18 @@ function MembersManagementModal({ tripId, members, onClose }) {
   );
 }
 
-// --- 彈窗組件: 新增/編輯支出 (含相同金額友善提醒與確認防呆) ---
+// --- 彈窗組件: 新增/編輯支出 (支援支出日期、收據憑證附件上傳與防呆提示) ---
 function AddExpenseModal({ tripId, initialData, members, existingExpenses = [], onClose }) {
   const defaultCurrency = useMemo(() => detectCurrency(tripId), [tripId]);
+  const todayStr = new Date().toISOString().split('T')[0];
+
   const [f, setF] = useState({
     title: initialData?.title || '',
     amount: initialData?.amount || '',
     payer: initialData?.payer || (members[0]?.name || ''),
-    currency: initialData?.currency || defaultCurrency
+    currency: initialData?.currency || defaultCurrency,
+    expenseDate: initialData?.expenseDate || todayStr,
+    attachment: initialData?.attachment || ''
   });
   const [splitMode, setSplitMode] = useState(initialData?.splitMode || 'average');
   const [numPeople, setNumPeople] = useState(initialData?.splitMode === 'average' && initialData?.splitDetails ? initialData.splitDetails.length : (members.length || 2));
@@ -2532,7 +2689,7 @@ function AddExpenseModal({ tripId, initialData, members, existingExpenses = [], 
       : [{ name: '', amount: '' }]
   );
   
-  // 相同金額確認對話框狀態
+  const [uploading, setUploading] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState(null);
 
   const handleAddPerson = (name = '') => setManualSplits([...manualSplits, { name, amount: '' }]);
@@ -2541,6 +2698,20 @@ function AddExpenseModal({ tripId, initialData, members, existingExpenses = [], 
     const newSplits = [...manualSplits];
     newSplits[index][field] = value;
     setManualSplits(newSplits);
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      setUploading(true);
+      const base64 = await compressImageToBase64(file);
+      setF(prev => ({ ...prev, attachment: base64 }));
+    } catch (err) {
+      alert("收據圖片讀取失敗，請重試");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const executeSave = async () => {
@@ -2582,7 +2753,6 @@ function AddExpenseModal({ tripId, initialData, members, existingExpenses = [], 
   const sub = async (e) => {
     e.preventDefault();
 
-    // 檢查現有支出是否已經有完全相同的幣別與金額 (排除正在編輯的同一筆)
     const targetAmount = Number(f.amount);
     const dup = existingExpenses.find(item => 
       item.id !== initialData?.id && 
@@ -2602,7 +2772,7 @@ function AddExpenseModal({ tripId, initialData, members, existingExpenses = [], 
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-[32px] w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col max-h-[92vh]">
         <h3 className="font-bold text-xl mb-4 text-emerald-900 flex items-center gap-2">
           <CreditCard size={24}/> {initialData ? '編輯支出與分攤' : '新增支出與分攤'}
         </h3>
@@ -2638,7 +2808,25 @@ function AddExpenseModal({ tripId, initialData, members, existingExpenses = [], 
         )}
 
         <form onSubmit={sub} className="space-y-4 overflow-y-auto menu-scrollbar pr-1">
-          <div><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">項目名稱</label><input type="text" required placeholder="例如: 飯店餐費、門票" className={inputStyle} value={f.title} onChange={e=>setF({...f, title:e.target.value})}/></div>
+          <div>
+            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1">項目名稱</label>
+            <input type="text" required placeholder="例如: 飯店餐費、門票、伴手禮" className={inputStyle} value={f.title} onChange={e=>setF({...f, title:e.target.value})}/>
+          </div>
+
+          {/* 支出日期欄位 */}
+          <div>
+            <label className="block text-xs font-bold text-stone-500 mb-1 ml-1 flex items-center gap-1">
+              <Calendar size={12} className="text-emerald-600"/> 支出日期
+            </label>
+            <input 
+              type="date" 
+              required 
+              className={inputStyle} 
+              value={f.expenseDate} 
+              onChange={e=>setF({...f, expenseDate: e.target.value})}
+            />
+          </div>
+
           <div className="flex gap-2">
             <div className="w-1/3"><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">幣別</label><select className={inputStyle} value={f.currency} onChange={e=>setF({...f, currency:e.target.value})}><option value="TWD">TWD</option><option value="JPY">JPY</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="KRW">KRW</option><option value="THB">THB</option></select></div>
             <div className="w-2/3"><label className="block text-xs font-bold text-stone-500 mb-1 ml-1">總金額</label><input type="number" required placeholder="0" className={inputStyle} value={f.amount} onChange={e=>{ setF({...f, amount:e.target.value}); setDuplicateWarning(null); }}/></div>
@@ -2667,6 +2855,34 @@ function AddExpenseModal({ tripId, initialData, members, existingExpenses = [], 
                 onChange={e=>setF({...f, payer:e.target.value})}
               />
             )}
+          </div>
+
+          {/* 🧾 收據憑證 / 明細截圖上傳專區 */}
+          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200">
+            <label className="block text-xs font-bold text-stone-700 mb-2 flex items-center gap-1.5">
+              <span>🧾</span> 購買明細／收據發票截圖 (選填，支援離線查驗)
+            </label>
+            <div className="space-y-2">
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleFileUpload} 
+                className="text-xs text-stone-500 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700"
+              />
+              <input 
+                type="text" 
+                placeholder="或直接貼上雲端硬碟 / PDF 檔案網址" 
+                value={(f.attachment || '').startsWith('data:image') ? '' : f.attachment} 
+                onChange={e=>setF({...f, attachment: e.target.value})}
+                className="w-full p-2 bg-white border border-stone-200 rounded-lg text-xs"
+              />
+              {uploading && <p className="text-xs text-emerald-600 font-bold">圖片最佳化中...</p>}
+              {f.attachment && (
+                <div className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                  <CheckCircle2 size={12}/> 已成功附加收據憑證截圖
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">

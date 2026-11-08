@@ -10,7 +10,7 @@ import {
   Briefcase, Gamepad2, Smile, Home, Armchair,
   UserMinus, Wifi, MonitorSmartphone, Fuel, ShoppingBag, Compass, Pencil, Tag, StickyNote,
   Calculator, UserCheck, ArrowRight, Hourglass, ChevronDown, ChevronUp, Radio,
-  ArrowUp, ArrowDown, ExternalLink, AlertTriangle
+  ArrowUp, ArrowDown, ExternalLink, AlertTriangle, Download
 } from 'lucide-react';
 
 // --- 請確認此處已填入您的真實 Firebase 設定 ---
@@ -307,7 +307,6 @@ function TripDashboard({ tripId, userId, onLeave }) {
       setMembers(snap.docs.map(d => ({id: d.id, ...d.data()})));
     }, err => console.error("同步成員失敗:", err));
 
-    // 監聽行程專屬設定（例如手動結束狀態）
     const unsubTripDoc = onSnapshot(doc(db, 'trips', tripId), (docSnap) => {
       if (docSnap.exists()) {
         setTripSettings(docSnap.data());
@@ -340,7 +339,6 @@ function TripDashboard({ tripId, userId, onLeave }) {
         </div>
       </main>
 
-      {/* 滿版憑證彈窗 */}
       {previewAttachment && (
         <AttachmentModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
       )}
@@ -435,14 +433,13 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (天數折疊、時區校正、已結束按鈕與結束畫面) ---
+// --- 視圖組件: 首頁 ---
 function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachment }) {
   const [openCategory, setOpenCategory] = useState('吃');
   const [weatherData, setWeatherData] = useState({});
   const [copiedCode, setCopiedCode] = useState(null);
   const [collapsedDates, setCollapsedDates] = useState({});
   
-  // 雙重保險：本地端判斷是否已手動結束行程
   const [localEnded, setLocalEnded] = useState(() => {
     return localStorage.getItem(`trip_ended_${tripId}`) === 'true';
   });
@@ -455,7 +452,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
     });
   }, [items]);
 
-  // 目的地時區自動判定
   const destinationTimeZone = useMemo(() => {
     const allLocations = timelineItems.map(i => i.location || '').join(' ');
     return detectTimeZone(tripId, allLocations);
@@ -517,7 +513,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
     return getDestinationCurrentTime(destinationTimeZone);
   }, [destinationTimeZone]);
 
-  // 全面加強判定：找出整個行程中最晚的結束時間
   const { currentItem, nextItem, isTripOver, isTripNotStarted } = useMemo(() => {
     if (timelineItems.length === 0) return { currentItem: null, nextItem: null, isTripOver: false, isTripNotStarted: false };
 
@@ -546,7 +541,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
       }
     }
 
-    // 找出所有行程項目中最晚的結束時間點
     let maxEndTime = 0;
     timelineItems.forEach(item => {
       const eStr = getItemEndTime(item);
@@ -558,8 +552,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
 
     const firstTimeStr = getItemSortTime(timelineItems[0]);
     const isNotStarted = firstTimeStr && !firstTimeStr.startsWith('9999') && now < new Date(firstTimeStr);
-    
-    // 只要當前時間超過了最後一項行程的結束時間，就觸發結束判斷
     const isOver = maxEndTime > 0 ? (now.getTime() > maxEndTime) : false;
 
     return {
@@ -595,7 +587,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
     return map;
   }, [uniqueDates]);
 
-  // 判斷某天的行程是否已經全數結束
   const isDateCompleted = (dateStr) => {
     const dayItems = timelineItems.filter(item => {
       const fullTime = getItemSortTime(item);
@@ -622,7 +613,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
     }));
   };
 
-  // 點擊「已結束」按鈕處理（雙重寫入保障）
   const handleEndTrip = async () => {
     localStorage.setItem(`trip_ended_${tripId}`, 'true');
     setLocalEnded(true);
@@ -633,7 +623,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
     }
   };
 
-  // 重新開啟行程（防止誤按）
   const handleReopenTrip = async () => {
     localStorage.removeItem(`trip_ended_${tripId}`);
     setLocalEnded(false);
@@ -673,7 +662,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
             </div>
           </div>
 
-          {/* 判斷 A：已按下「已結束」 */}
           {isTripManuallyEnded ? (
             <div className="p-6 bg-white/10 rounded-2xl backdrop-blur-md text-center py-8 border border-white/10 space-y-3">
               <span className="text-4xl block animate-bounce">🌟</span>
@@ -699,7 +687,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
               </div>
             </div>
           ) : isTripOver ? (
-            /* 判斷 B：最後一天的最後一個行程結束後，顯示「已結束」按鈕 */
             <div className="p-6 bg-white/10 rounded-2xl backdrop-blur-md text-center py-6 border border-white/10 space-y-3">
               <span className="text-3xl block">🎉</span>
               <h3 className="font-bold text-white text-lg">本次旅程行程已全數結束！</h3>
@@ -777,7 +764,7 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
                 {nextItem?.location && (
                   <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
                     <span className="text-xs text-stone-300 truncate max-w-[180px] flex items-center gap-1">
-                      <MapPin size={12} className="text-stone-400 flex-shrink-0"/> {nextItem.location}
+                      <MapPin size={12} className="text-stone-400"/> {nextItem.location}
                     </span>
                     <button
                       onClick={() => window.open(getNavigationLink(nextItem.location), '_blank')}
@@ -793,7 +780,7 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
         </section>
       )}
 
-      {/* 2. 旅程時間軸 (支援每日自動／手動折疊功能) */}
+      {/* 2. 旅程時間軸 (支援每日自動／手動折疊) */}
       <section>
         <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
           <h2 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3">
@@ -831,7 +818,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
 
               return (
                 <div key={item.id} className="relative ml-10">
-                  {/* 日期標題 ＋ 天氣資訊 ＋ 折疊切換按鈕 */}
                   {isFirstItemOfDay && (
                     <div className="mb-3.5 -ml-8 flex items-center gap-2 z-20 relative flex-wrap">
                       <div className="bg-emerald-800 text-white font-mono font-bold text-xs px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-emerald-700">
@@ -843,7 +829,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
                       </div>
                       {getWeatherDisplay(currentDate)}
                       
-                      {/* 當日手動折疊切換 */}
                       <button
                         type="button"
                         onClick={() => toggleDateCollapse(currentDate)}
@@ -933,7 +918,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
                           </div>
                         )}
 
-                        {/* 快速出示憑證截圖 */}
                         {item.attachment && (
                           <div className="mt-2.5">
                             <button
@@ -952,7 +936,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
                               <a href={getGoogleMapsLink(item.location)} target="_blank" rel="noreferrer" className="ml-1 text-blue-600 font-bold hover:underline">地圖</a>
                             </div>
 
-                            {/* 🚗 自駕專用 Mapcode 徽章 (支援點擊一鍵複製，行程、餐廳、住宿通用) */}
                             {item.mapcode && (
                               <button
                                 type="button"
@@ -1231,7 +1214,7 @@ function WishListView({ tripId, items }) {
               <div key={c.id} className="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden transition-all">
                 <button
                   type="button"
-                  onClick={() => setOpenCategory(isOpen ? null : c.id)}
+                  onClick={() => setOpenCategory(isOpen ? null : cat.id)}
                   className={`w-full flex items-center justify-between p-4 ${c.bgColor} hover:opacity-90 transition`}
                 >
                   <div className="flex items-center gap-2">
@@ -1520,7 +1503,7 @@ function ItineraryView({ tripId, items }) {
                       <StickyNote size={12}/> 備忘註記
                     </span>
                   ) : isRestaurant ? (
-                    <span className="text-xs font-bold text-orange-700 uppercase bg-orange-100/70 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <span className="text-xs font-bold text-orange-700 uppercase bg-orange-100 px-2 py-0.5 rounded-md flex items-center gap-1">
                       <Utensils size={12}/> RES
                     </span>
                   ) : (
@@ -1666,7 +1649,7 @@ function AddMemoModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 彈窗組件: 新增/編輯行程規劃 (支援自駕 Mapcode 欄位) ---
+// --- 彈窗組件: 新增/編輯行程規劃 (支援 Mapcode 欄位) ---
 function AddItineraryModal({ tripId, initialData, onClose }) { 
   const [sightName, setSightName] = useState(initialData?.type !== 'res' ? (initialData?.title || '') : '');
   const [restaurantName, setRestaurantName] = useState(initialData?.type === 'res' ? (initialData?.title || '') : '');
@@ -1763,7 +1746,7 @@ function AddItineraryModal({ tripId, initialData, onClose }) {
             <input className={inputClass} placeholder="地點或詳細地址" value={location} onChange={e=>setLocation(e.target.value)} required/>
           </div>
 
-          {/* 🚗 自駕專屬：Mapcode 常駐輸入欄位 */}
+          {/* 🚗 自駕專用：Mapcode 常駐輸入欄位 */}
           <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-100 space-y-1.5">
             <label className="block text-xs font-bold text-indigo-950 flex items-center gap-1">
               <span>🚗</span> GPS Mapcode (自駕導航專用，選填)
@@ -2377,7 +2360,7 @@ function JapanesePhrases() {
   );
 }
 
-// --- 視圖組件: 記帳分帳 (新增支出日期、收據憑證上傳、付款人墊付統計看板與相同金額防呆) ---
+// --- 視圖組件: 記帳分帳 (新增一鍵匯出 Excel / CSV 功能) ---
 function ExpenseView({ tripId, expenses, members, onPreviewAttachment }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
@@ -2464,6 +2447,69 @@ function ExpenseView({ tripId, expenses, members, onPreviewAttachment }) {
     return { balances, transfers };
   }, [expenses]);
 
+  // 匯出 Excel (CSV 格式，內建 UTF-8 BOM，Excel 直接雙擊開啟不亂碼)
+  const handleExportToExcel = () => {
+    if (expenses.length === 0) {
+      alert("目前尚無記帳紀錄可匯出！");
+      return;
+    }
+
+    let csv = '\uFEFF'; // UTF-8 BOM
+
+    // 1. 總帳概況
+    csv += '【旅程分帳總報表】\r\n';
+    csv += `旅遊代碼,${tripId}\r\n`;
+    csv += `匯出時間,${new Date().toLocaleString()}\r\n`;
+    csv += `總支出估計 (TWD),NT$ ${Math.round(totalTWD).toLocaleString()}\r\n\r\n`;
+
+    // 2. 付款人實付統計
+    csv += '【付款人個別總墊付統計】\r\n';
+    csv += '成員姓名,折合台幣總墊付 (TWD),幣別明細\r\n';
+    Object.entries(payerTotals).forEach(([pName, pStat]) => {
+      const currDetail = Object.entries(pStat.byCurrency)
+        .map(([c, a]) => `${c} ${Math.round(a)}`)
+        .join(' / ');
+      csv += `"${pName}",${Math.round(pStat.totalTWD)},"${currDetail}"\r\n`;
+    });
+    csv += '\r\n';
+
+    // 3. 智慧分帳結算建議
+    csv += '【智慧結算轉帳建議】\r\n';
+    csv += '應付人,應收人,建議結算金額 (TWD)\r\n';
+    if (settlementData.transfers.length === 0) {
+      csv += '無,無,帳目已完全平衡\r\n';
+    } else {
+      settlementData.transfers.forEach(t => {
+        csv += `"${t.from}","${t.to}",${t.amount}\r\n`;
+      });
+    }
+    csv += '\r\n';
+
+    // 4. 每筆支出詳細清單
+    csv += '【支出消費詳細明細】\r\n';
+    csv += '支出日期,項目名稱,幣別,原始金額,折合台幣 (TWD),付款人,分攤模式,分攤明細\r\n';
+    expenses.forEach(exp => {
+      const rate = rates[exp.currency] || 1;
+      const twd = Math.round(Number(exp.amount) * rate);
+      const splitModeText = exp.splitMode === 'average' ? '自動平均' : '手動分攤';
+      const detailsText = (exp.splitDetails || [])
+        .map(d => `${d.name}: ${exp.currency} ${Math.round(d.amount)}`)
+        .join('; ');
+      
+      csv += `"${exp.expenseDate || ''}","${exp.title || ''}","${exp.currency || ''}",${exp.amount || 0},${twd},"${exp.payer || ''}","${splitModeText}","${detailsText}"\r\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${tripId}_記帳分帳總表_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleOpenEdit = (exp) => {
     setEditingExpense(exp);
     setShowAdd(true);
@@ -2501,15 +2547,24 @@ function ExpenseView({ tripId, expenses, members, onPreviewAttachment }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {/* 匯出 Excel (CSV) 按鈕 */}
+          <button 
+            type="button"
+            onClick={handleExportToExcel}
+            className="bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-3 rounded-2xl flex items-center gap-1.5 font-bold shadow-md transition active:scale-95 text-xs sm:text-sm"
+            title="將所有記帳清單、分帳與總帳結算匯出為 Excel 試算表"
+          >
+            <Download size={18}/> 匯出 Excel
+          </button>
           <button 
             onClick={() => setShowMembersModal(true)} 
-            className="bg-stone-800 hover:bg-stone-900 text-white px-4 py-3 rounded-2xl flex items-center gap-1.5 font-bold shadow-md transition active:scale-95"
+            className="bg-stone-800 hover:bg-stone-900 text-white px-4 py-3 rounded-2xl flex items-center gap-1.5 font-bold shadow-md transition active:scale-95 text-xs sm:text-sm"
           >
             <Users size={18}/> 誰來付錢
           </button>
           <button 
             onClick={()=>{ setEditingExpense(null); setShowAdd(true); }} 
-            className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg btn-active-effect hover:bg-emerald-700"
+            className="bg-emerald-600 text-white px-5 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg btn-active-effect hover:bg-emerald-700 text-xs sm:text-sm"
           >
             <Plus size={20} /> 新增支出
           </button>

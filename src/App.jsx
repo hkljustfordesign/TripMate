@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, collection, onSnapshot, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, doc, collection, onSnapshot, updateDoc, deleteDoc, addDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { 
   MapPin, Calendar, Clock, CreditCard, Users, Plus, Trash2, Plane, Train, 
   ArrowRightLeft, Navigation, Utensils, CheckCircle2, 
@@ -101,6 +101,24 @@ const getItemSortTime = (item) => {
     return `${item.checkInDate}T${time}`;
   }
   return '9999-99-99T99:99';
+};
+
+// 取得行程的結束時間字串
+const getItemEndTime = (item) => {
+  if (!item) return null;
+  if (item.endDatetime) return item.endDatetime;
+  if (item.checkOutDatetime) return item.checkOutDatetime;
+  if (item.checkOutDate) {
+    let time = item.checkOutTime || '11:00';
+    if (time.length === 4) time = '0' + time;
+    return `${item.checkOutDate}T${time}`;
+  }
+  const startTime = getItemSortTime(item);
+  if (startTime && !startTime.startsWith('9999')) {
+    const d = new Date(startTime);
+    return new Date(d.getTime() + (90 * 60 * 1000)).toISOString();
+  }
+  return null;
 };
 
 // 圖片壓縮為 Base64 (支援離線展示)
@@ -289,11 +307,12 @@ function TripDashboard({ tripId, userId, onLeave }) {
       setMembers(snap.docs.map(d => ({id: d.id, ...d.data()})));
     }, err => console.error("同步成員失敗:", err));
 
+    // 監聽行程專屬設定（例如手動結束狀態）
     const unsubTripDoc = onSnapshot(doc(db, 'trips', tripId), (docSnap) => {
       if (docSnap.exists()) {
         setTripSettings(docSnap.data());
       }
-    });
+    }, err => console.log("讀取行程設定狀態中..."));
 
     return () => { unsubItems(); unsubExp(); unsubPack(); unsubTodo(); unsubWish(); unsubMembers(); unsubTripDoc(); };
   }, [tripId, userId]);
@@ -416,14 +435,17 @@ function MobileFabMenu({ activeTab, onNavClick, onLeave, isMenuOpen, setIsMenuOp
   );
 }
 
-// --- 視圖組件: 首頁 (天數折疊、目的地時區偵測、行程結束切換) ---
+// --- 視圖組件: 首頁 (天數折疊、時區校正、已結束按鈕與結束畫面) ---
 function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachment }) {
   const [openCategory, setOpenCategory] = useState('吃');
   const [weatherData, setWeatherData] = useState({});
   const [copiedCode, setCopiedCode] = useState(null);
-  
-  // 手動折疊的日期清單
   const [collapsedDates, setCollapsedDates] = useState({});
+  
+  // 雙重保險：本地端判斷是否已手動結束行程
+  const [localEnded, setLocalEnded] = useState(() => {
+    return localStorage.getItem(`trip_ended_${tripId}`) === 'true';
+  });
 
   const timelineItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -433,7 +455,7 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
     });
   }, [items]);
 
-  // 自動依行程與地點偵測目的地時區
+  // 目的地時區自動判定
   const destinationTimeZone = useMemo(() => {
     const allLocations = timelineItems.map(i => i.location || '').join(' ');
     return detectTimeZone(tripId, allLocations);
@@ -491,12 +513,11 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
     );
   };
 
-  // 取得目標時區之當前時間
   const currentDestinationTime = useMemo(() => {
     return getDestinationCurrentTime(destinationTimeZone);
   }, [destinationTimeZone]);
 
-  // 旅程即時動態比對 (以目的地當地時間為準)
+  // 全面加強判定：找出整個行程中最晚的結束時間
   const { currentItem, nextItem, isTripOver, isTripNotStarted } = useMemo(() => {
     if (timelineItems.length === 0) return { currentItem: null, nextItem: null, isTripOver: false, isTripNotStarted: false };
 
@@ -510,9 +531,8 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
       if (!startStr || startStr.startsWith('9999')) continue;
 
       const startTime = new Date(startStr);
-      const endTime = item.endDatetime 
-        ? new Date(item.endDatetime) 
-        : new Date(startTime.getTime() + (90 * 60 * 1000));
+      const endTimeStr = getItemEndTime(item);
+      const endTime = endTimeStr ? new Date(endTimeStr) : new Date(startTime.getTime() + (90 * 60 * 1000));
 
       if (now >= startTime && now <= endTime) {
         current = item;
@@ -526,12 +546,21 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
       }
     }
 
-    const firstTimeStr = getItemSortTime(timelineItems[0]);
-    const lastItem = timelineItems[timelineItems.length - 1];
-    const lastTimeStr = lastItem ? (lastItem.endDatetime || getItemSortTime(lastItem)) : null;
+    // 找出所有行程項目中最晚的結束時間點
+    let maxEndTime = 0;
+    timelineItems.forEach(item => {
+      const eStr = getItemEndTime(item);
+      if (eStr) {
+        const t = new Date(eStr).getTime();
+        if (!isNaN(t) && t > maxEndTime) maxEndTime = t;
+      }
+    });
 
+    const firstTimeStr = getItemSortTime(timelineItems[0]);
     const isNotStarted = firstTimeStr && !firstTimeStr.startsWith('9999') && now < new Date(firstTimeStr);
-    const isOver = lastTimeStr && !lastTimeStr.startsWith('9999') && now > new Date(lastTimeStr);
+    
+    // 只要當前時間超過了最後一項行程的結束時間，就觸發結束判斷
+    const isOver = maxEndTime > 0 ? (now.getTime() > maxEndTime) : false;
 
     return {
       currentItem: current,
@@ -566,7 +595,7 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
     return map;
   }, [uniqueDates]);
 
-  // 判斷某天的行程是否已經全數過期結束（自動收合依據）
+  // 判斷某天的行程是否已經全數結束
   const isDateCompleted = (dateStr) => {
     const dayItems = timelineItems.filter(item => {
       const fullTime = getItemSortTime(item);
@@ -574,8 +603,8 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
     });
     if (dayItems.length === 0) return false;
     const lastItem = dayItems[dayItems.length - 1];
-    const endTimeStr = lastItem.endDatetime || getItemSortTime(lastItem);
-    if (!endTimeStr || endTimeStr.startsWith('9999')) return false;
+    const endTimeStr = getItemEndTime(lastItem);
+    if (!endTimeStr) return false;
     return currentDestinationTime > new Date(endTimeStr);
   };
 
@@ -583,7 +612,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
     if (collapsedDates[dateStr] !== undefined) {
       return collapsedDates[dateStr];
     }
-    // 若該天行程已過期，預設自動收合
     return isDateCompleted(dateStr);
   };
 
@@ -594,21 +622,29 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
     }));
   };
 
-  // 結束本次行程按鈕處理
+  // 點擊「已結束」按鈕處理（雙重寫入保障）
   const handleEndTrip = async () => {
+    localStorage.setItem(`trip_ended_${tripId}`, 'true');
+    setLocalEnded(true);
     try {
-      await updateDoc(doc(db, 'trips', tripId), {
-        isManuallyEnded: true
-      });
+      await setDoc(doc(db, 'trips', tripId), { isManuallyEnded: true }, { merge: true });
     } catch (e) {
-      // 若 trip 文件尚未建立則新增
-      await updateDoc(doc(db, 'trips', tripId), { isManuallyEnded: true }).catch(async () => {
-        await addDoc(collection(db, 'trips'), { id: tripId, isManuallyEnded: true });
-      });
+      console.log("雲端標記已結束:", e);
     }
   };
 
-  const isTripManuallyEnded = Boolean(tripSettings?.isManuallyEnded);
+  // 重新開啟行程（防止誤按）
+  const handleReopenTrip = async () => {
+    localStorage.removeItem(`trip_ended_${tripId}`);
+    setLocalEnded(false);
+    try {
+      await setDoc(doc(db, 'trips', tripId), { isManuallyEnded: false }, { merge: true });
+    } catch (e) {
+      console.log("重新開啟行程:", e);
+    }
+  };
+
+  const isTripManuallyEnded = localEnded || Boolean(tripSettings?.isManuallyEnded);
 
   const wishlistCategories = [
     { id: '吃', icon: <Utensils size={18}/>, color: 'text-orange-600', bgColor: 'bg-orange-50' },
@@ -633,15 +669,25 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
               <h2 className="text-sm font-bold tracking-wider uppercase text-emerald-300">旅程即時動態 • NOW & NEXT</h2>
             </div>
             <div className="text-xs text-stone-300 font-mono font-medium flex items-center gap-1">
-              <Clock size={12}/> 當地時間校正中 ({destinationTimeZone.split('/')[1] || '當地'})
+              <Clock size={12}/> 當地時間 ({destinationTimeZone.split('/')[1] || '當地'})
             </div>
           </div>
 
+          {/* 判斷 A：已按下「已結束」 */}
           {isTripManuallyEnded ? (
-            <div className="p-6 bg-white/10 rounded-2xl backdrop-blur-md text-center py-8 border border-white/10 space-y-2">
-              <span className="text-3xl block">🌟</span>
-              <h3 className="text-xl font-bold text-white tracking-wide">祝您有個愉快的旅程，期待下次再見 !</h3>
-              <p className="text-xs text-stone-300">本次所有回憶、備忘錄與分帳統計皆已妥善保存。</p>
+            <div className="p-6 bg-white/10 rounded-2xl backdrop-blur-md text-center py-8 border border-white/10 space-y-3">
+              <span className="text-4xl block animate-bounce">🌟</span>
+              <h3 className="text-2xl font-bold text-white tracking-wide">祝您有個愉快的旅程，期待下次再見 !</h3>
+              <p className="text-xs text-stone-300">本次所有美好回憶、交通住宿與記帳明細皆已妥善保存。</p>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleReopenTrip}
+                  className="text-[11px] text-stone-400 hover:text-white underline transition"
+                >
+                  (誤按可點此重新檢視即時動態)
+                </button>
+              </div>
             </div>
           ) : isTripNotStarted ? (
             <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10">
@@ -653,16 +699,17 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
               </div>
             </div>
           ) : isTripOver ? (
+            /* 判斷 B：最後一天的最後一個行程結束後，顯示「已結束」按鈕 */
             <div className="p-6 bg-white/10 rounded-2xl backdrop-blur-md text-center py-6 border border-white/10 space-y-3">
               <span className="text-3xl block">🎉</span>
-              <h3 className="font-bold text-white text-lg">本次旅程最後一個排程已完成！</h3>
-              <p className="text-xs text-stone-300">所有精彩行程均已結束，請點擊下方確認結束本次旅程：</p>
+              <h3 className="font-bold text-white text-lg">本次旅程行程已全數結束！</h3>
+              <p className="text-xs text-stone-300">感謝一路相伴，請點擊下方按鍵結束本次旅程動態：</p>
               <button
                 type="button"
                 onClick={handleEndTrip}
-                className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-stone-950 font-bold rounded-xl text-sm transition shadow-lg active:scale-95 mx-auto"
+                className="px-8 py-3 bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-bold rounded-2xl text-base transition shadow-lg active:scale-95 mx-auto flex items-center justify-center gap-2"
               >
-                已結束
+                <CheckCircle2 size={18}/> 已結束
               </button>
             </div>
           ) : (
@@ -746,13 +793,13 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
         </section>
       )}
 
-      {/* 2. 旅程時間軸 (支援每日自動/手動折疊收合功能) */}
+      {/* 2. 旅程時間軸 (支援每日自動／手動折疊功能) */}
       <section>
         <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
           <h2 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3">
             <Home className="text-emerald-600" size={32}/> 旅程時間軸
           </h2>
-          <span className="text-xs text-stone-400 font-bold">當日已結束之行程會自動收合，亦可手動點擊切換</span>
+          <span className="text-xs text-stone-400 font-bold">已完結行程會自動收合，亦可點擊右側按鈕隨時切換</span>
         </div>
 
         <div className="space-y-6 relative">
@@ -796,7 +843,7 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
                       </div>
                       {getWeatherDisplay(currentDate)}
                       
-                      {/* 當日手動折疊收合按鈕 */}
+                      {/* 當日手動折疊切換 */}
                       <button
                         type="button"
                         onClick={() => toggleDateCollapse(currentDate)}
@@ -811,7 +858,6 @@ function HomeView({ tripId, items, wishlistItems, tripSettings, onPreviewAttachm
                     </div>
                   )}
 
-                  {/* 若該天收合，則隱藏卡片 */}
                   {!dayCollapsed && (
                     <>
                       <div className={`absolute -left-[42px] top-4 w-5 h-5 rounded-full border-4 border-white shadow-sm z-10 ${
@@ -1620,7 +1666,7 @@ function AddMemoModal({ tripId, initialData, onClose }) {
   ); 
 }
 
-// --- 彈窗組件: 新增/編輯行程規劃 (支援 Mapcode 欄位) ---
+// --- 彈窗組件: 新增/編輯行程規劃 (支援自駕 Mapcode 欄位) ---
 function AddItineraryModal({ tripId, initialData, onClose }) { 
   const [sightName, setSightName] = useState(initialData?.type !== 'res' ? (initialData?.title || '') : '');
   const [restaurantName, setRestaurantName] = useState(initialData?.type === 'res' ? (initialData?.title || '') : '');
@@ -1830,7 +1876,8 @@ function AddTransportModal({ tripId, initialData, onClose }) {
     }
   };
 
-  const sub = async (e) => { 
+  const sub = async (e) => 
+  { 
     e.preventDefault(); 
     if (initialData?.id) {
       await updateDoc(doc(db, 'trips', tripId, 'items', initialData.id), f);
@@ -2199,7 +2246,7 @@ function JapanesePhrases() {
         "持ち帰りはできますか (可以外帶嗎？)",
         "お会計をお願いします (麻煩結帳)",
         "別々に会計できますか (可以分開結帳嗎？)",
-        "ごちそうさ反了 (謝謝招待 / 吃飽了)"
+        "ごちそうさまでした (謝謝招待 / 吃飽了)"
       ]
     },
     "交通 🚗": {
